@@ -35,11 +35,12 @@ def distance_matrix(r_elements: list or np.ndarray,
     x = {r: [x_qc[i], x_trailing_vortices_start[i]] for i, r in enumerate(r_elements)}
     y = {r: [y_qc[i], y_trailing_vortices_start[i]] for i, r in enumerate(r_elements)}
     z = {r: [r, r] for r in r_elements}
-    for t in np.linspace(wake_length/(wake_speed*(time_resolution-1)), wake_length/wake_speed, time_resolution):
+    for t in np.linspace(0, wake_length/wake_speed, time_resolution):
+        angle = rotor_rotation_speed*t
         for i, r in enumerate(r_elements):
             x[r].append(x_trailing_vortices_start[i]+wake_speed*t)
-            y[r].append(y_trailing_vortices_start[i]+r*np.sin(rotor_rotation_speed*t))
-            z[r].append(r*np.cos(rotor_rotation_speed*t))
+            y[r].append(np.cos(angle)*y_trailing_vortices_start[i]+r*np.sin(angle))
+            z[r].append(-np.sin(angle)*y_trailing_vortices_start[i]+r*np.cos(angle))
 
     if visualise_blade_wake:
         fig = plt.figure()
@@ -63,7 +64,7 @@ def distance_matrix(r_elements: list or np.ndarray,
         rot_matrix = np.array([[1, 0, 0],
                                [0, np.cos(rot_angle), -np.sin(rot_angle)],
                                [0, np.sin(rot_angle), np.cos(rot_angle)]])
-        wakes.append(np.dot(base_wake, rot_matrix.T))
+        wakes.append(np.dot(base_wake, rot_matrix))
 
     if visualise_wake:
         fig = plt.figure()
@@ -79,5 +80,5 @@ def distance_matrix(r_elements: list or np.ndarray,
 
 
 distance_matrix(r_elements=0.2+np.linspace(0,1,5), c_elements=np.linspace(0,0.2,5)[::-1],wake_speed=0.5,
-                wake_length=5, time_resolution=40, blade_rotation=0*np.pi/2, rotor_rotation_speed=np.pi/4,
+                wake_length=5, time_resolution=50, blade_rotation=0*np.pi/2, rotor_rotation_speed=np.pi/4,
                 visualise_blade_wake=False, visualise_wake=True)
