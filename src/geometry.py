@@ -1,3 +1,5 @@
+# Script to create the wake positions of trailing vortices
+
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -29,15 +31,15 @@ class FrozenWake:
         facing the rotor from the front and z point upwards. z goes along the leading edge of a blade that is point
         upward. Rotating a blade positively will turn the trailing edge to the left (when facing the rotor from the
         front).
-        :param r_elements:
-        :param c_elements:
-        :param distance_control_point:
-        :param blade_rotation:
-        :param rotor_rotation_speed:
-        :param n_blades:
-        :return:
+        :param r_elements:              blade section radial position
+        :param c_elements:              blade section chord length 
+        :param blade_rotation:          rotation of the blade sections from the in plane position in Radian
+        :param rotor_rotation_speed:    Rotational speed of the rotor
+        :param n_blades:                Number of blades
+        :return:                        None
         """
         self.r_elements = r_elements
+        # checks if a list of chord and blade rotations is given. if not, create a list with the uniform value
         self.c_elements, self.blade_rotation = self._float_to_ndarray(c_elements, blade_rotation)
         if self.r_elements.shape != self.c_elements.shape or self.r_elements.shape  != self.blade_rotation.shape:
             raise ValueError("'r_elements', 'c_elements', and 'blade_rotation' do not have the same length. This only "
@@ -46,6 +48,7 @@ class FrozenWake:
                              f" {self.blade_rotation.size}")
         self.rotor_rotation_speed = rotor_rotation_speed
         self.n_blades = n_blades
+        # if a new rotor is defined, the old wakes are no longer correct and are therefore deleted
         self.wake_blade_elementwise = None
         self.wake_blade = None
         self.wake_rotor = None
@@ -137,19 +140,19 @@ class FrozenWake:
         """
         self.time_resolution = time_resolution
         qc_elements = self.c_elements/4 # quarter chord
-        x_c = np.sin(self.blade_rotation)*self.c_elements # x position of the trailing edge
-        y_c = np.cos(self.blade_rotation)*self.c_elements # y position of the trailing edge
         x_qc = np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord
         y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord
+        x_c = np.sin(self.blade_rotation)*self.c_elements # x position of the trailing edge
+        y_c = np.cos(self.blade_rotation)*self.c_elements # y position of the trailing edge
         # the swept vortices start a quarter chord behind the airfoil
         x_swept_trailing_vortices_start = x_c+x_qc # x position of the first node of the first swept trailing vortex
         y_swept_trailing_vortices_start = y_c+y_qc # y position of the first node of the first swept trailing vortex
         # the following three lines define the containers for the trailing vortex structure of each blade element
+        # they are initialised with the fixed trailing vortex (first trailing vortex = fixed trailing vortex)
         x = {r: [x_qc[i], x_swept_trailing_vortices_start[i]] for i, r in enumerate(self.r_elements)}
         y = {r: [y_qc[i], y_swept_trailing_vortices_start[i]] for i, r in enumerate(self.r_elements)}
         z = {r: [r, r] for r in self.r_elements}
-        print(y, z)
-        for t in np.linspace(0, wake_length/wake_speed, time_resolution):
+        for t in np.linspace(wake_length/(wake_speed*time_resolution), wake_length/wake_speed, time_resolution-1):
             angle = self.rotor_rotation_speed*t # increase the rotational angle
             for i, r in enumerate(self.r_elements):
                 x[r].append(x_swept_trailing_vortices_start[i]+wake_speed*t) # pure convection
