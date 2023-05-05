@@ -24,16 +24,16 @@ class FrozenWake:
                   c_elements: float or np.ndarray,
                   blade_rotation: float or np.ndarray,
                   rotor_rotation_speed: float,
-                  n_blades: int = 3,
+                  n_blades: int = 3
                   ) -> None:
         """
         The rotor coordinate system is such that the x faces downwind along the rotor axis, y faces to the left
-        facing the rotor from the front and z point upwards. z goes along the leading edge of a blade that is point
-        upward. Rotating a blade positively will turn the trailing edge to the left (when facing the rotor from the
-        front).
+        facing the rotor from the front (i.e. looking downwind) and z point upwards. z goes along the leading edge of a
+        blade that is point upward. All angles follow a standard right-hand rule.
         :param r_elements:              blade section radial position
         :param c_elements:              blade section chord length 
-        :param blade_rotation:          rotation of the blade sections from the in plane position in Radian
+        :param blade_rotation:          rotation of the blade sections around the z-axis in radians. An angle of 0
+        means the chord is parallel to the y-axis with the trailing edge pointing in the positive y-direction.
         :param rotor_rotation_speed:    Rotational speed of the rotor
         :param n_blades:                Number of blades
         :return:                        None
@@ -87,8 +87,8 @@ class FrozenWake:
         self.wake_rotor = [self.wake_blade]
         for rot_angle in np.linspace(2*np.pi/self.n_blades, 2*np.pi*(1-1/self.n_blades), self.n_blades-1):
             rot_matrix = np.array([[1, 0, 0],
-                                   [0, np.cos(rot_angle), -np.sin(rot_angle)],
-                                   [0, np.sin(rot_angle), np.cos(rot_angle)]])
+                                   [0, np.cos(rot_angle), np.sin(rot_angle)],
+                                   [0, -np.sin(rot_angle), np.cos(rot_angle)]])
             self.wake_rotor.append(np.dot(self.wake_blade, rot_matrix))
         return None
 
@@ -140,9 +140,9 @@ class FrozenWake:
         """
         self.time_resolution = time_resolution
         qc_elements = self.c_elements/4 # quarter chord
-        x_qc = np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord
+        x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord
         y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord
-        x_c = np.sin(self.blade_rotation)*self.c_elements # x position of the trailing edge
+        x_c = -np.sin(self.blade_rotation)*self.c_elements # x position of the trailing edge
         y_c = np.cos(self.blade_rotation)*self.c_elements # y position of the trailing edge
         # the swept vortices start a quarter chord behind the airfoil
         x_swept_trailing_vortices_start = x_c+x_qc # x position of the first node of the first swept trailing vortex
@@ -153,12 +153,13 @@ class FrozenWake:
         y = {r: [y_qc[i], y_swept_trailing_vortices_start[i]] for i, r in enumerate(self.r_elements)}
         z = {r: [r, r] for r in self.r_elements}
         for t in np.linspace(wake_length/(wake_speed*time_resolution), wake_length/wake_speed, time_resolution-1):
-            angle = self.rotor_rotation_speed*t # increase the rotational angle
+            angle = self.rotor_rotation_speed*t-np.pi/2 # It is assumed that the rotor is rotating clockwise when
+            # looking downwind. The -np.pi/2 rotate the t=0 position of the blade ot be parallel to the z-axis.
             for i, r in enumerate(self.r_elements):
                 x[r].append(x_swept_trailing_vortices_start[i]+wake_speed*t) # pure convection
                 # the first trailing vortex is parallel to the chord
-                y[r].append(np.cos(angle)*y_swept_trailing_vortices_start[i]+r*np.sin(angle)) # rotated
-                z[r].append(-np.sin(angle)*y_swept_trailing_vortices_start[i]+r*np.cos(angle)) # rotated
+                y[r].append(-np.sin(angle)*y_swept_trailing_vortices_start[i]+r*np.cos(angle)) # rotated
+                z[r].append(-np.cos(angle)*y_swept_trailing_vortices_start[i]-r*np.sin(angle)) # rotated
         self.wake_blade_elementwise = {"x": x, "y": y, "z": z}
         return None
 
