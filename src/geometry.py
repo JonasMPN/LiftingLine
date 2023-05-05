@@ -30,6 +30,7 @@ class FrozenWake:
         The rotor coordinate system is such that the x faces downwind along the rotor axis, y faces to the left
         facing the rotor from the front (i.e. looking downwind) and z point upwards. z goes along the leading edge of a
         blade that is point upward. All angles follow a standard right-hand rule.
+
         :param r_elements:              blade section radial position
         :param c_elements:              blade section chord length 
         :param blade_rotation:          rotation of the blade sections around the z-axis in radians. An angle of 0
@@ -58,6 +59,7 @@ class FrozenWake:
         """
         Creates the wake from one blade as one data structure. It does that by combining the points from the element
         wise wake to create a np.ndarray with size (len(r_elements), 3). All points are appended row wise.
+        
         :param wake_speed:
         :param wake_length:
         :param time_resolution:
@@ -77,6 +79,7 @@ class FrozenWake:
         """
         Creates the full wake. It does that by calculating the wake for a single blade and rotating that one
         n_blades-1 times. Returns a list with the wakes of each blade.
+        
         :param wake_speed:
         :param wake_length:
         :param time_resolution:
@@ -95,6 +98,7 @@ class FrozenWake:
     def blade_elementwise_visualisation(self) -> None:
         """
         Visualises the wake of one blade. Colours the trailing vortex of each blade element separately.
+        
         :return: None
         """
         if self.wake_blade_elementwise is None:
@@ -115,6 +119,7 @@ class FrozenWake:
     def rotor_visualisation(self) -> None:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
+        
         :return: None
         """
         if self.wake_rotor is None:
@@ -133,6 +138,7 @@ class FrozenWake:
     def _blade_elementwise(self, wake_speed: float, wake_length: float, time_resolution: int) -> None:
         """
         Returns three dictionaries, one for each coordinate. Each dictionary is divided into the single blade elements.
+        
         :param wake_speed:
         :param wake_length:
         :param time_resolution:
