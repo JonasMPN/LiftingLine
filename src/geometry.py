@@ -119,43 +119,49 @@ class FrozenWake:
         Calculates the induction matrix from the wake of the rotor on all control points of one blade. The control
         point has to be specified as a multiple of the chord length. The distance that results is measured from the
         leading edge parallel to the chord.
-        :param control_point:        :return:
+        :param control_point:
+        :return:
         """
-        self._assert_wake("rotor")
-        x_control_points = -np.sin(self.blade_rotation)*self.c_elements*control_point
-        y_control_points = np.cos(self.blade_rotation)*self.c_elements*control_point
-        z_control_points = self.r_elements
-        # the next line is not influenced by the number  of blades because there is only n_blade_elements unique
-        # circulations
-        # with which these matrices will be multiplied
-        n_circulations = len(self.r_elements)
-        single_wake_induction_matrices = {
+        self._assert_wake("rotor") # a rotor wake has to exist
+        x_control_points = -np.sin(self.blade_rotation)*self.c_elements*control_point # place control points
+        y_control_points = np.cos(self.blade_rotation)*self.c_elements*control_point # place control points
+        z_control_points = self.r_elements # place control points
+        control_points = np.asarray([x_control_points, y_control_points, z_control_points]).T # collect all coordinates
+
+        n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed
+        single_wake_induction_matrices = { # the inductions are calculated for individual wakes first (debugging help)
             "x": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)],
             "y": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)],
             "z": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)]
         }
-        control_points = np.asarray([x_control_points, y_control_points, z_control_points]).T
-        for wake_i, wake in enumerate(self.wake_rotor):
-            for induced_element in range(len(self.r_elements)):
-                control_point = control_points[induced_element, :]
-                for inducing_element in range(len(self.r_elements)):
+        for wake_i, wake in enumerate(self.wake_rotor): # iterate over the wakes of each blade
+            for induced_element in range(len(self.r_elements)): # iterate over each blade element
+                control_point = control_points[induced_element, :] # get the control point of the current blade element
+                for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
+                    # element. Every blade element thus influences (thus inducing_element) the current element (which
+                    # is therefore called induced_element, because it 'receives' an induced velocity.
+
+                    # get the start points of each vortex element of the trailing vortex from the inducing blade element
                     vortex_starts = wake[inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)-1]
+                    # get the end points of each vortex element of the trailing vortex from the inducing blade element
                     vortex_ends = wake[1+inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)]
                     induction_factors = np.zeros(3)
-                    for vortex_start, vortex_end in zip(vortex_starts, vortex_ends):
+                    for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
                         induction_factors += self._induction_factor(vortex_start, vortex_end, control_point)
+                    # place the induction factors (x, y, and z component) of this wake in its respective wake
+                    # induction matrix
                     single_wake_induction_matrices["x"][wake_i][induced_element, inducing_element] = induction_factors[0]
                     single_wake_induction_matrices["y"][wake_i][induced_element, inducing_element] = induction_factors[1]
                     single_wake_induction_matrices["z"][wake_i][induced_element, inducing_element] = induction_factors[2]
 
-        induction_matrices = {
+        induction_matrices = { # initialise container for the final, summed together induction factor matrices
             "x": np.zeros((n_circulations, n_circulations)),
             "y": np.zeros((n_circulations, n_circulations)),
             "z": np.zeros((n_circulations, n_circulations))
         }
         for direction in ["x", "y", "z"]:
             for induction_mat in single_wake_induction_matrices[direction]:
-                induction_matrices[direction] += induction_mat
+                induction_matrices[direction] += induction_mat # sum the contributions of all blade wakes
         return [induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]]
 
     def blade_elementwise_visualisation(self) -> None:
