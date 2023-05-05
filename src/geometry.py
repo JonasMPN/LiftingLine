@@ -123,9 +123,9 @@ class FrozenWake:
         ax = fig.add_subplot(projection="3d")
         for wake, c in zip(self.wake_rotor, ["b", "g", "r", "c", "m", "y", "k"][:len(self.wake_rotor)]):
             for element in range(len(self.r_elements)):
-                ax.plot(wake[element*(self.time_resolution+2):(element+1)*(self.time_resolution+2), 0],
-                        wake[element*(self.time_resolution+2):(element+1)*(self.time_resolution+2), 1],
-                        wake[element*(self.time_resolution+2):(element+1)*(self.time_resolution+2), 2], color=c)
+                ax.plot(wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 0],
+                        wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 1],
+                        wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 2], color=c)
         plt.show()
         return None
 
