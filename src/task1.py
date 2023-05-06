@@ -2,12 +2,13 @@
 
 from testpck.testfile import testfunc
 import numpy as np
-import scipy
+import pandas as pd
 import matplotlib.pyplot as plt
+import scipy
 from bem_pckg.helper_functions import Helper
 from bem_pckg import BEM
 from bem_pckg import twist_chord
-import pandas as pd
+from geometry import FrozenWake
 import task1
 helper  = Helper()
 
@@ -65,7 +66,7 @@ def task1():
     ### Operational data 
     v_0 = 10                            # [m] Wind speed
     air_density = 1.225
-    tsr = [6,8,10]                      # Tip speed ratios  to be calculated
+    tsr = 8                      # Tip speed ratios  to be calculated
     airfoil = pd.read_excel("../data/polar.xlsx",skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
     
     ### Get twist and chord distributions
@@ -82,7 +83,26 @@ def task1():
 
     
     # With the induction the 
-    induction = calc_induction_bem(8,-2)
-    print(induction)
+    induction = calc_induction_bem(tsr,-2)
+
+    ######################################################
+    ################ PART 2
+    ######################################################
+    
+    # Compute the wake structure
+    
+    # compute inputs for the wake tool:
+    omega = tsr*v_0/radius
+    wake_speed = (1-induction)*v_0  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
+
+    wake = FrozenWake()
+    wake.set_rotor(0.2+np.linspace(0,1,5), np.linspace(0,0.2,5)[::-1], blade_rotation=-0.5*np.pi/2,
+                   rotor_rotation_speed=omega)
+    #wake.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=50)
+    wake.set_wake_properties(wake_speed=wake_speed, wake_length=5, time_resolution=50)
+    wake.rotor()
+    wake.blade_elementwise_visualisation()
+
+
 if __name__=="__main__":
     task1()
