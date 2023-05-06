@@ -50,7 +50,7 @@ class FrozenWake:
         """
         self.r_elements = r_elements
         # checks if a list of chord and blade rotations is given. if not, create a list with the uniform value
-        self.c_elements, self.blade_rotation = self._float_to_ndarray(c_elements, blade_rotation)
+        self.c_elements, self.blade_rotation = self._float_to_ndarray(len(r_elements), c_elements, blade_rotation)
         if self.r_elements.shape != self.c_elements.shape or self.r_elements.shape  != self.blade_rotation.shape:
             raise ValueError("'r_elements', 'c_elements', and 'blade_rotation' do not have the same length. This only "
                              "happens if 'c_elements' or 'blade_rotation' are specified as a list. The shapes are:"
@@ -114,32 +114,44 @@ class FrozenWake:
             self.wake_rotor.append(np.dot(self.wake_blade, rot_matrix))
         return None
 
-    def induction_matrix(self, control_point: float) -> list[np.ndarray, np.ndarray, np.ndarray]:
+    def induction_matrices(self,
+                           x_control_points: float or np.ndarray,
+                           y_control_points: float or np.ndarray,
+                           z_control_points: float or np.ndarray,) -> tuple[list[np.ndarray], list[np.ndarray]]:
         """
-        Calculates the induction matrix from the wake of the rotor on all control points of one blade. The control
-        point has to be specified as a multiple of the chord length. The distance that results is measured from the
-        leading edge parallel to the chord.
+        Calculates the induction matrix from the wake of the rotor on all control points. The control points are
+        specified by their individual coordinates. If an array of coordinates is given then that array must be a
+        single row or single column array.
         :param control_point:
-        :return:
+        :return: tuple with the induction matrices as a list as the first entry and the control points as a list as
+        the second entry (each control points is a np.ndarray of size 3).
         """
         self._assert_wake("rotor") # a rotor wake has to exist
-        x_control_points = -np.sin(self.blade_rotation)*self.c_elements*control_point # place control points
-        y_control_points = np.cos(self.blade_rotation)*self.c_elements*control_point # place control points
-        z_control_points = self.r_elements # place control points
-        control_points = np.asarray([x_control_points, y_control_points, z_control_points]).T # collect all coordinates
+        # check how many coordinates are given per axis
+        n_x = 1 if type(x_control_points) == float or type(x_control_points) == int else x_control_points.size
+        n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
+        n_z = 1 if type(z_control_points) == float or type(z_control_points) == int else z_control_points.size
+        lengths = np.asarray([n_x, n_y, n_z])
+        if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions match
+            raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
+                             f"n_z] = {lengths}")
+        n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
+        x_cp, y_cp, z_cp = self._float_to_ndarray(n_control_points, x_control_points, y_control_points,
+                                                  z_control_points)
+        control_points = [np.asarray([x, y, z]) for x, y, z in zip(x_cp, y_cp, z_cp)] # update structure for later use
 
         n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed
         single_wake_induction_matrices = { # the inductions are calculated for individual wakes first (debugging help)
-            "x": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)],
-            "y": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)],
-            "z": [np.zeros((n_circulations, n_circulations)) for _ in range(self.n_blades)]
+            "x": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "y": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "z": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)]
         }
         for wake_i, wake in enumerate(self.wake_rotor): # iterate over the wakes of each blade
-            for induced_element in range(len(self.r_elements)): # iterate over each blade element
-                control_point = control_points[induced_element, :] # get the control point of the current blade element
+            for i_cp, control_point in zip(range(len(control_points)), control_points): # iterate over the control
+                # points
                 for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
                     # element. Every blade element thus influences (thus inducing_element) the current element (which
-                    # is therefore called induced_element, because it 'receives' an induced velocity.
+                    # is therefore called induced_element, because it 'receives' an induced velocity)
 
                     # get the start points of each vortex element of the trailing vortex from the inducing blade element
                     vortex_starts = wake[inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)-1]
@@ -150,24 +162,25 @@ class FrozenWake:
                         induction_factors += self._induction_factor(vortex_start, vortex_end, control_point)
                     # place the induction factors (x, y, and z component) of this wake in its respective wake
                     # induction matrix
-                    single_wake_induction_matrices["x"][wake_i][induced_element, inducing_element] = induction_factors[0]
-                    single_wake_induction_matrices["y"][wake_i][induced_element, inducing_element] = induction_factors[1]
-                    single_wake_induction_matrices["z"][wake_i][induced_element, inducing_element] = induction_factors[2]
+                    single_wake_induction_matrices["x"][wake_i][i_cp, inducing_element] = induction_factors[0]
+                    single_wake_induction_matrices["y"][wake_i][i_cp, inducing_element] = induction_factors[1]
+                    single_wake_induction_matrices["z"][wake_i][i_cp, inducing_element] = induction_factors[2]
 
         induction_matrices = { # initialise container for the final, summed together induction factor matrices
-            "x": np.zeros((n_circulations, n_circulations)),
-            "y": np.zeros((n_circulations, n_circulations)),
-            "z": np.zeros((n_circulations, n_circulations))
+            "x": np.zeros((n_control_points, n_circulations)),
+            "y": np.zeros((n_control_points, n_circulations)),
+            "z": np.zeros((n_control_points, n_circulations))
         }
         for direction in ["x", "y", "z"]:
             for induction_mat in single_wake_induction_matrices[direction]:
                 induction_matrices[direction] += induction_mat # sum the contributions of all blade wakes
-        return [induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]]
+        return [induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]], control_points
 
-    def blade_elementwise_visualisation(self) -> None:
+    def blade_elementwise_visualisation(self, control_points: list[np.ndarray] = None) -> None:
         """
         Visualises the wake of one blade. Colours the trailing vortex of each blade element separately.
-        
+        Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
+        control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :return: None
         """
         self._assert_wake("blade")
@@ -176,6 +189,9 @@ class FrozenWake:
         for r in self.r_elements:  # or choose individual elements
             ax.plot(self.wake_blade_elementwise["x"][r], self.wake_blade_elementwise["y"][r],
                     self.wake_blade_elementwise["z"][r])
+        if control_points is not None:
+            for control_point in control_points:
+                ax.plot(control_point[0], control_point[1], control_point[2], "ko")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
@@ -183,10 +199,11 @@ class FrozenWake:
         plt.show()
         return None
 
-    def rotor_visualisation(self) -> None:
+    def rotor_visualisation(self, control_points: list[np.ndarray] = None) -> None:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
-        
+        Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
+        control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :return: None
         """
         self._assert_wake("rotor")
@@ -197,6 +214,9 @@ class FrozenWake:
                 ax.plot(wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 0],
                         wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 1],
                         wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 2], color=c)
+        if control_points is not None:
+            for control_point in control_points:
+                ax.plot(control_point[0], control_point[1], control_point[2], "ko")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
@@ -265,8 +285,8 @@ class FrozenWake:
         K = 1/(4*np.pi*l_sq_plane_normal)*(fac_1/R_1-fac_2/R_2) # some magic factor
         return K*vec_plane_normal # boom done
 
-    def _float_to_ndarray(self, *args) -> list[np.ndarray]:
-        return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(self.r_elements.size)]) for arg in
+    def _float_to_ndarray(self, length: int, *args) -> list[np.ndarray]:
+        return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
                 args]
 
     def _set(self, **kwargs) -> None:
