@@ -127,17 +127,18 @@ class FrozenWake:
         the second entry (each control points is a np.ndarray of size 3).
         """
         self._assert_wake("rotor") # a rotor wake has to exist
+        # check how many coordinates are given per axis
         n_x = 1 if type(x_control_points) == float or type(x_control_points) == int else x_control_points.size
         n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
         n_z = 1 if type(z_control_points) == float or type(z_control_points) == int else z_control_points.size
         lengths = np.asarray([n_x, n_y, n_z])
-        if np.unique(lengths).size > 2:
+        if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions match
             raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
                              f"n_z] = {lengths}")
-        n_control_points = np.max([n_x, n_y, n_z])
+        n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
         x_cp, y_cp, z_cp = self._float_to_ndarray(n_control_points, x_control_points, y_control_points,
                                                   z_control_points)
-        control_points = [np.asarray([x, y, z]) for x, y, z in zip(x_cp, y_cp, z_cp)]
+        control_points = [np.asarray([x, y, z]) for x, y, z in zip(x_cp, y_cp, z_cp)] # update structure for later use
 
         n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed
         single_wake_induction_matrices = { # the inductions are calculated for individual wakes first (debugging help)
