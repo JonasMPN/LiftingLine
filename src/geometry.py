@@ -1,8 +1,11 @@
-# Script to create the wake positions of trailing vortices
+# class to create the vortex system of a wing, a blade or a whole rotor
+from typing import Dict, Any
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-class FrozenWake:
+
+class VortexSystem:
     def __init__(self):
         # rotor structural properties
         self.r_elements = None
@@ -16,19 +19,25 @@ class FrozenWake:
         self.wake_length = None
         self.time_resolution = None
 
-        # control point
-        self.distance_control_point = None
+        # control points
+        self.control_points = None
+        self.n_control_points = None
 
         # instance properties
-        self.wake_blade_elementwise = None
-        self.wake_blade = None
-        self.wake_rotor = None
+        # bound vortices
+        self.coordinates_blade_bound_elementwise = None
+        self.coordinates_blade_bound = None
+        self.coordinates_rotor_bound = None
+        # trailing vortices
+        self.coordinates_blade_trailing_elementwise = None
+        self.coordinates_blade_trailing = None
+        self.coordinates_rotor_trailing = None
 
         # error clarification
         self.rotor_set = False
         self.wake_set = False
 
-    def set_rotor(self,
+    def set_blade(self,
                   r_elements: np.ndarray,
                   c_elements: float or np.ndarray,
                   blade_rotation: float or np.ndarray,
@@ -58,10 +67,15 @@ class FrozenWake:
                              f" {self.blade_rotation.size}")
         self.rotor_rotation_speed = rotor_rotation_speed
         self.n_blades = n_blades
-        # if a new rotor is defined, the old wakes are no longer correct and are therefore deleted
-        self.wake_blade_elementwise = None
-        self.wake_blade = None
-        self.wake_rotor = None
+        # if a new rotor is defined, the old vortex system is no longer correct and is therefore deleted
+        # bound vortex system
+        self.coordinates_blade_bound_elementwise = None
+        self.coordinates_blade_bound = None
+        self.coordinates_rotor_bound = None
+        # trailing vortex system
+        self.coordinates_blade_trailing_elementwise = None
+        self.coordinates_blade_trailing = None
+        self.coordinates_rotor_trailing = None
         # error clarification for user
         self.rotor_set = True
         return None
@@ -72,61 +86,19 @@ class FrozenWake:
         self.wake_set = True
         return None
 
-    def blade(self) -> None:
-        """
-        Creates the wake from one blade as one data structure. It does that by combining the points from the element
-        wise wake to create a np.ndarray with size (len(r_elements), 3). All points are appended row wise.
-        
-        :param wake_speed:
-        :param wake_length:
-        :param time_resolution:
-        :return:
-        """
-        self._assert_properties(self.blade)
-        if self.wake_blade_elementwise is None:
-            self._blade_elementwise()
-        wake_x, wake_y, wake_z = list(), list(), list()
-        for r in self.r_elements:
-            wake_x += self.wake_blade_elementwise["x"][r]
-            wake_y += self.wake_blade_elementwise["y"][r]
-            wake_z += self.wake_blade_elementwise["z"][r]
-        self.wake_blade = np.asarray([wake_x, wake_y, wake_z]).T
-        return None
-
-    def rotor(self) -> None:
-        """
-        Creates the full wake. It does that by calculating the wake for a single blade and rotating that one
-        n_blades-1 times. Returns a list with the wakes of each blade.
-        
-        :param wake_speed:
-        :param wake_length:
-        :param time_resolution:
-        :return:
-        """
-        self._assert_properties(self.rotor)
-        if self.wake_blade is None:
-            self.blade()
-        self.wake_rotor = [self.wake_blade]
-        for rot_angle in np.linspace(2*np.pi/self.n_blades, 2*np.pi*(1-1/self.n_blades), self.n_blades-1):
-            rot_matrix = np.array([[1, 0, 0],
-                                   [0, np.cos(rot_angle), np.sin(rot_angle)],
-                                   [0, -np.sin(rot_angle), np.cos(rot_angle)]])
-            self.wake_rotor.append(np.dot(self.wake_blade, rot_matrix))
-        return None
-
-    def induction_matrices(self,
+    def set_control_points(self,
                            x_control_points: float or np.ndarray,
                            y_control_points: float or np.ndarray,
-                           z_control_points: float or np.ndarray,) -> tuple[list[np.ndarray], list[np.ndarray]]:
+                           z_control_points: float or np.ndarray) -> None:
         """
-        Calculates the induction matrix from the wake of the rotor on all control points. The control points are
-        specified by their individual coordinates. If an array of coordinates is given then that array must be a
-        single row or single column array.
-        :param control_point:
-        :return: tuple with the induction matrices as a list as the first entry and the control points as a list as
-        the second entry (each control points is a np.ndarray of size 3).
+        The control points are specified by their individual coordinates. If an array of coordinates is given then
+        that array must be a single row or single column array. The control points are internally saved as a list of
+        (1,3) sized np.ndarrays.
+        :param x_control_points:
+        :param y_control_points:
+        :param z_control_points:
+        :return: None
         """
-        self._assert_wake("rotor") # a rotor wake has to exist
         # check how many coordinates are given per axis
         n_x = 1 if type(x_control_points) == float or type(x_control_points) == int else x_control_points.size
         n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
@@ -135,20 +107,89 @@ class FrozenWake:
         if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions match
             raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
                              f"n_z] = {lengths}")
-        n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
-        x_cp, y_cp, z_cp = self._float_to_ndarray(n_control_points, x_control_points, y_control_points,
+        self.n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
+        x_cp, y_cp, z_cp = self._float_to_ndarray(self.n_control_points, x_control_points, y_control_points,
                                                   z_control_points)
-        control_points = [np.asarray([x, y, z]) for x, y, z in zip(x_cp, y_cp, z_cp)] # update structure for later use
+        self.control_points = [np.asarray([x, y, z]) for x, y, z in zip(x_cp, y_cp, z_cp)] # update structure for later
+        # use
+        return None
+
+    def blade_trailing(self) -> np.ndarray:
+        """
+        Combines the element-wise trailing vortex system for one blade as one data structure. The logic is explained in
+        _combine_elementwise.
+        :return: None
+        """
+        self._combine_elementwise(called_from=self.blade_trailing,
+                                  coordinates_from=self.coordinates_blade_trailing_elementwise,
+                                  if_not_do=self._blade_trailing_elementwise,
+                                  combine_to="coordinates_blade_trailing")
+        return self.coordinates_blade_trailing
+
+    def blade_bound(self) -> np.ndarray:
+        """
+        Combines the element-wise bound vortex system for one blade as one data structure. The logic is explained in
+        _combine_elementwise.
+        :return: None
+        """
+        self._combine_elementwise(called_from=self.blade_bound,
+                                  coordinates_from=self.coordinates_blade_bound_elementwise,
+                                  if_not_do=self._blade_bound_elementwise,
+                                  combine_to="coordinates_blade_bound")
+        return self.coordinates_blade_bound
+
+    def blade(self) -> None:
+        self.blade_trailing()
+        self.blade_bound()
+        return None
+
+    def rotor_trailing(self) -> None:
+        """
+        Creates the full trailing vortex system. It does that by taking the wake for a single blade and rotating
+        that one n_blades-1 times. The trailing vortex system is saved as a list with the trailing vortex system of
+        each blade per entry. The logic is explained in _rotate_combined.
+        :return:
+        """
+        self._rotate_combined(called_from=self.rotor_trailing,
+                              coordinates_from=self.coordinates_blade_trailing,
+                              if_not_do=self.blade_trailing,
+                              rotate_to="coordinates_rotor_trailing")
+        return None
+
+    def rotor_bound(self) -> None:
+        self._rotate_combined(called_from=self.rotor_bound,
+                              coordinates_from=self.coordinates_blade_bound,
+                              if_not_do=self.blade_bound,
+                              rotate_to="coordinates_rotor_bound")
+        return None
+
+    def rotor(self) -> None:
+        self.rotor_trailing()
+        self.rotor_bound()
+        return None
+
+    def bound_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Calculates the induction matrix from bound vortices of the rotor on all control points.
+        :return: tuple with the induction matrices
+        """
+        pass
+
+    def trailing_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Calculates the induction matrix from the wake of the rotor on all control points.
+        :return: tuple with the induction matrices
+        """
+        self._assert_trailing("rotor")  # a rotor wake has to exist
 
         n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed
         single_wake_induction_matrices = { # the inductions are calculated for individual wakes first (debugging help)
-            "x": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "y": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "z": [np.zeros((n_control_points, n_circulations)) for _ in range(self.n_blades)]
+            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)]
         }
-        for wake_i, wake in enumerate(self.wake_rotor): # iterate over the wakes of each blade
-            for i_cp, control_point in zip(range(len(control_points)), control_points): # iterate over the control
-                # points
+        for wake_i, wake in enumerate(self.coordinates_rotor_trailing): # iterate over the wakes of each blade
+            for i_cp, control_point in enumerate(self.control_points): # iterate over the control points
                 for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
                     # element. Every blade element thus influences (thus inducing_element) the current element (which
                     # is therefore called induced_element, because it 'receives' an induced velocity)
@@ -159,7 +200,7 @@ class FrozenWake:
                     vortex_ends = wake[1+inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)]
                     induction_factors = np.zeros(3)
                     for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
-                        induction_factors += self._induction_factor(vortex_start, vortex_end, control_point)
+                        induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point)
                     # place the induction factors (x, y, and z component) of this wake in its respective wake
                     # induction matrix
                     single_wake_induction_matrices["x"][wake_i][i_cp, inducing_element] = induction_factors[0]
@@ -167,30 +208,50 @@ class FrozenWake:
                     single_wake_induction_matrices["z"][wake_i][i_cp, inducing_element] = induction_factors[2]
 
         induction_matrices = { # initialise container for the final, summed together induction factor matrices
-            "x": np.zeros((n_control_points, n_circulations)),
-            "y": np.zeros((n_control_points, n_circulations)),
-            "z": np.zeros((n_control_points, n_circulations))
+            "x": np.zeros((self.n_control_points, n_circulations)),
+            "y": np.zeros((self.n_control_points, n_circulations)),
+            "z": np.zeros((self.n_control_points, n_circulations))
         }
         for direction in ["x", "y", "z"]:
             for induction_mat in single_wake_induction_matrices[direction]:
                 induction_matrices[direction] += induction_mat # sum the contributions of all blade wakes
-        return [induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]], control_points
+        return induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]
 
-    def blade_elementwise_visualisation(self, control_points: list[np.ndarray] = None) -> None:
+    def blade_elementwise_visualisation(self,
+                                        trailing: bool=True,
+                                        bound: bool=True,
+                                        control_points: bool=False) -> None:
         """
         Visualises the wake of one blade. Colours the trailing vortex of each blade element separately.
         Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
         control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :return: None
         """
-        self._assert_wake("blade")
+
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
-        for r in self.r_elements:  # or choose individual elements
-            ax.plot(self.wake_blade_elementwise["x"][r], self.wake_blade_elementwise["y"][r],
-                    self.wake_blade_elementwise["z"][r])
-        if control_points is not None:
-            for control_point in control_points:
+        if trailing:
+            self._assert_trailing("blade")
+            for r in self.r_elements:  # or choose individual elements
+                ax.plot(self.coordinates_blade_trailing_elementwise["x"][r],
+                        self.coordinates_blade_trailing_elementwise["y"][r],
+                        self.coordinates_blade_trailing_elementwise["z"][r])
+        if bound:
+            self._assert_bound("blade")
+            x_bound = self.coordinates_blade_bound_elementwise["x"]["_"]
+            y_bound = self.coordinates_blade_bound_elementwise["y"]["_"]
+            z_bound = self.coordinates_blade_bound_elementwise["z"]["_"]
+            x_start, x_end = x_bound[:-1], x_bound[1:]
+            y_start, y_end = y_bound[:-1], y_bound[1:]
+            z_start, z_end = z_bound[:-1], z_bound[1:]
+            for x_s, x_e, y_s, y_e, z_s, z_e in zip(x_start, x_end, y_start, y_end, z_start, z_end):
+                ax.plot((x_s, x_e), (y_s, y_e), (z_s, z_e))
+
+        if control_points:
+            if self.control_points is None:
+                raise ValueError("No control points can be visualised because none have been set. Set them using "
+                                 "'set_control_points()' first.")
+            for control_point in self.control_points:
                 ax.plot(control_point[0], control_point[1], control_point[2], "ko")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
@@ -199,23 +260,40 @@ class FrozenWake:
         plt.show()
         return None
 
-    def rotor_visualisation(self, control_points: list[np.ndarray] = None) -> None:
+    def rotor_visualisation(self,
+                            trailing: bool=True,
+                            bound: bool=True,
+                            control_points: bool=False) -> None:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
         Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
         control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :return: None
         """
-        self._assert_wake("rotor")
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
-        for wake, c in zip(self.wake_rotor, ["b", "g", "r", "c", "m", "y", "k"][:len(self.wake_rotor)]):
-            for element in range(len(self.r_elements)):
-                ax.plot(wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 0],
-                        wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 1],
-                        wake[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 2], color=c)
-        if control_points is not None:
-            for control_point in control_points:
+        colours = ["b", "g", "r", "c", "m", "y", "k"]
+        n_elements = len(self.r_elements)
+        if trailing:
+            self._assert_trailing("rotor")
+            for trailing, c in zip(self.coordinates_rotor_trailing, colours[:len(self.coordinates_rotor_trailing)]):
+                for element in range(n_elements):
+                    ax.plot(trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 0],
+                            trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 1],
+                            trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 2], color=c)
+        if bound:
+            self._assert_bound("rotor")
+            for bound, c in zip(self.coordinates_rotor_bound, colours[:len(self.coordinates_rotor_trailing)]):
+                for element in range(n_elements):
+                    ax.plot(bound[element*n_elements:(element+1)*n_elements, 0],
+                            bound[element*n_elements:(element+1)*n_elements, 1],
+                            bound[element*n_elements:(element+1)*n_elements, 2], color=c)
+
+        if control_points:
+            if self.control_points is None:
+                raise ValueError("No control points can be visualised because none have been set. Set them using "
+                                 "'set_control_points()' first.")
+            for control_point in self.control_points:
                 ax.plot(control_point[0], control_point[1], control_point[2], "ko")
         ax.set_xlabel("x")
         ax.set_ylabel("y")
@@ -223,14 +301,26 @@ class FrozenWake:
         plt.show()
         return None
 
-    def _blade_elementwise(self) -> None:
+    def _blade_bound_elementwise(self) -> dict[str, dict]:
         """
-        Returns three dictionaries, one for each coordinate. Each dictionary is divided into the single blade elements.
-        
-        :param wake_speed:
-        :param wake_length:
-        :param time_resolution:
-        :return:
+        Creates a dictionary of the bound vortex coordinates. Each key is an axis and its values are np.ndarrays with
+        the coordinates.
+        :return: None
+        """
+        qc_elements = self.c_elements/4 # quarter chord
+        x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord
+        y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord
+        self.coordinates_blade_bound_elementwise = {"x": {"_": x_qc}, "y": {"_": y_qc}, "z": {"_": self.r_elements}}
+        # the second layer dictionaries have to be artificially used to work with '_combine_elements'.
+        return self.coordinates_blade_bound_elementwise
+
+    def _blade_trailing_elementwise(self) -> dict[str, dict]:
+        """
+        Creates a dictionary of the trailing vortices coordinates. Each key (representing an axis) of the final
+        dictionary has a dictionary as its value. These second layer dictionaries have each blade element's radius as
+        key and (x, y, or y depending on the first layer dictionary) the trailing vortices' coordinates that belong
+        to that blade element.
+        :return: None
         """
         qc_elements = self.c_elements/4 # quarter chord
         x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord
@@ -255,13 +345,101 @@ class FrozenWake:
                 # the first trailing vortex is parallel to the chord
                 y[r].append(-np.sin(angle)*y_swept_trailing_vortices_start[i]+r*np.cos(angle)) # rotated
                 z[r].append(-np.cos(angle)*y_swept_trailing_vortices_start[i]-r*np.sin(angle)) # rotated
-        self.wake_blade_elementwise = {"x": x, "y": y, "z": z}
+        self.coordinates_blade_trailing_elementwise = {"x": x, "y": y, "z": z}
+        return self.coordinates_blade_trailing_elementwise
+
+    def _set(self, **kwargs) -> None:
+        """
+        Sets parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
+        :param kwargs:
+        :return:
+        """
+        existing_parameters = [*self.__dict__]
+        for parameter, value in kwargs.items():
+            if parameter not in existing_parameters:
+                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
+            self.__dict__[parameter] = value
         return None
 
-    def _induction_factor(self,
-                          vortex_start: np.ndarray,
-                          vortex_end: np.ndarray,
-                          induction_point: np.ndarray) -> np.ndarray:
+    def _assert_properties(self, fnc):
+        for params, was_set in {"rotor": self.rotor_set, "wake": self.wake_set}.items():
+            if not was_set:
+                raise ValueError(f"{params} properties have to be set before using {fnc.__name__}().")
+        return None
+
+    def _assert_trailing(self, vortex_system_type):
+        response = {
+            "blade": [self.coordinates_blade_trailing, "rotor_trailing(), blade_trailing(), rotor(), or blade()"],
+            "rotor": [self.coordinates_rotor_trailing, "rotor_trailing() or rotor()"]
+        }
+        if response[vortex_system_type][0] is None:
+            raise ValueError(f"A {vortex_system_type} trailing vortex system has to be calculated first. Use"
+                             f" {response[vortex_system_type][1]} first.")
+        return None
+
+    def _assert_bound(self, vortex_system_type):
+        response = {
+            "blade": [self.coordinates_blade_bound, "rotor_bound(), blade_bound(), rotor(), or blade()"],
+            "rotor": [self.coordinates_rotor_bound, "rotor_bound() or rotor()"]
+        }
+        if response[vortex_system_type][0] is None:
+            raise ValueError(f"A {vortex_system_type} bound vortex system has to be calculated first. Use"
+                             f" {response[vortex_system_type][1]} first.")
+        return None
+
+    def _combine_elementwise(self, called_from, coordinates_from, if_not_do, combine_to: str):
+        """
+        Combines element-wise coordinates into a np.ndarray of size (N,3).
+        :param called_from:         Which function calls _combine_elementwise()
+        :param coordinates_from:    The element-wise coordinates of the vortex system that are to be combined
+        :param if_not_do:           Function that calculates these elementwise coordinates if they are not yet
+                                    calculated
+        :param save_to:             Class property name as string (without self.) to which the combined coordinates are
+                                    saved.
+        :return:
+        """
+        self._assert_properties(called_from) # assert that the rotor and wake properties have been set
+        if coordinates_from is None: # if the element-wise coordinates do not yet exist
+            coordinates_from = if_not_do() # then calculate them
+        self.__dict__[combine_to] = np.asarray([ # save combined coordinates to a np.ndarray of size (N,3)
+            [coord for coords in coordinates_from["x"].values() for coord in coords],
+            [coord for coords in coordinates_from["y"].values() for coord in coords],
+            [coord for coords in coordinates_from["z"].values() for coord in coords],
+        ]).T
+        return None
+
+    def _rotate_combined(self,
+                         called_from,
+                         coordinates_from,
+                         if_not_do,
+                         rotate_to: str) -> None:
+        """
+        Creates a specific (bound or trailing) vortex system for the specified rotor. It does that by taking the
+        specific vortex system from a single blade and rotating it n_blades-1 times. The resulting vortex system is
+        saved as a list with the vortex system (size (N,3)) of each blade as a unique entry.
+        :param called_from:         Which function calls _rotate_combined()
+        :param coordinates_from:    Class property in which the combined coordinates are saved
+        :param if_not_do:           Function that calculates the combined coordinates of the vortex system if they are
+                                    not yet calculated
+        :param save_to:             Class property name as string (without self.) to which the combined coordinates are
+                                    saved.
+        :return:
+        """
+        self._assert_properties(called_from) # assert that the rotor and wake properties have been set
+        if coordinates_from is None: # if the combined coordinates do not yet exist
+            coordinates_from = if_not_do() # then calculate them
+        self.__dict__[rotate_to] = [coordinates_from] # start list with the un-rotated blade vortex system
+        for rot_angle in np.linspace(2*np.pi/self.n_blades, 2*np.pi*(1-1/self.n_blades), self.n_blades-1):
+            rot_matrix = np.array([[1, 0, 0],
+                                   [0, np.cos(rot_angle), np.sin(rot_angle)],
+                                   [0, -np.sin(rot_angle), np.cos(rot_angle)]])
+            self.__dict__[rotate_to].append(np.dot(coordinates_from, rot_matrix)) # add rotated vortex system
+        return None
+
+    @staticmethod
+    def _vortex_induction_factor(vortex_start: np.ndarray,
+                                 vortex_end: np.ndarray,
+                                 induction_point: np.ndarray) -> np.ndarray:
         """
         This function calculates the induction at a point 'induction_point' from a straight vortex line between the
         two points 'vortex_start' and 'vortex_end' for a unity circulation. The returned value is a vector of induced
@@ -285,32 +463,7 @@ class FrozenWake:
         K = 1/(4*np.pi*l_sq_plane_normal)*(fac_1/R_1-fac_2/R_2) # some magic factor
         return K*vec_plane_normal # boom done
 
-    def _float_to_ndarray(self, length: int, *args) -> list[np.ndarray]:
+    @staticmethod
+    def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
         return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
                 args]
-
-    def _set(self, **kwargs) -> None:
-        """
-        Sets parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
-        :param kwargs:
-        :return:
-        """
-        existing_parameters = [*self.__dict__]
-        for parameter, value in kwargs.items():
-            if parameter not in existing_parameters:
-                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
-            self.__dict__[parameter] = value
-        return None
-
-    def _assert_properties(self, fnc):
-        for params, was_set in {"rotor": self.rotor_set, "wake": self.wake_set}.items():
-            if not was_set:
-                raise ValueError(f"{params} properties have to be set before using {fnc.__name__}().")
-
-    def _assert_wake(self, wake_type):
-        response = {
-            "blade": [self.wake_blade, "rotor() or blade()"],
-            "rotor": [self.wake_rotor, "rotor()"]
-        }
-        if response[wake_type][0] is None:
-            raise ValueError(f"A {wake_type} wake has to be calculated first. Use {response[wake_type][1]} first.")
