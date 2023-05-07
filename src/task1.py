@@ -76,7 +76,7 @@ def task1():
     radii = np.linspace(inner_radius, radius, resolution)
     radii_centre_list = [0.5*(radii[i] + radii[i+1]) for i in range(len(radii)-1)] 
     twist_list = [twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list]  # Get the twist
-    chord_list = [twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list]  # Get the twist
+    chord_list = [twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list]  # Get the chord
     # So now we have defined the rotor fully. 
     # We now want to run BEM to obtain a CT value which we can use to compute the wake convection
    
