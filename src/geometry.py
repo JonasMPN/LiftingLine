@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 
 class VortexSystem:
     def __init__(self):
-        # rotor structural properties
+        # blade properties
         self.r_elements = None
         self.c_elements = None
         self.blade_rotation = None
+
+        # rotor properties
         self.rotor_rotation_speed = None
         self.n_blades = None
 
@@ -116,9 +118,9 @@ class VortexSystem:
 
     def blade_trailing(self) -> np.ndarray:
         """
-        Combines the element-wise trailing vortex system for one blade as one data structure. The logic is explained in
+        Combines the element-wise trailing vortex system for one blade into one np.ndarray. The logic is explained in
         _combine_elementwise.
-        :return: None
+        :return: points of the trailing vortices of a blade
         """
         self._combine_elementwise(called_from=self.blade_trailing,
                                   coordinates_from=self.coordinates_blade_trailing_elementwise,
@@ -130,7 +132,7 @@ class VortexSystem:
         """
         Combines the element-wise bound vortex system for one blade as one data structure. The logic is explained in
         _combine_elementwise.
-        :return: None
+        :return: points of the bound vortices of a blade
         """
         self._combine_elementwise(called_from=self.blade_bound,
                                   coordinates_from=self.coordinates_blade_bound_elementwise,
@@ -139,16 +141,19 @@ class VortexSystem:
         return self.coordinates_blade_bound
 
     def blade(self) -> None:
+        """
+        Calculates the vortex system (as in coordinates of the line vortices) of a blade, meaning its trailing and
+        bound vortex system.
+        :return: None
+        """
         self.blade_trailing()
         self.blade_bound()
         return None
 
     def rotor_trailing(self) -> None:
         """
-        Creates the full trailing vortex system. It does that by taking the wake for a single blade and rotating
-        that one n_blades-1 times. The trailing vortex system is saved as a list with the trailing vortex system of
-        each blade per entry. The logic is explained in _rotate_combined.
-        :return:
+        Creates the full trailing vortex system of a rotor. The logic is explained in _rotate_combined.
+        :return: None
         """
         self._rotate_combined(called_from=self.rotor_trailing,
                               coordinates_from=self.coordinates_blade_trailing,
@@ -157,6 +162,10 @@ class VortexSystem:
         return None
 
     def rotor_bound(self) -> None:
+        """
+        Creates the full bound vortex system of a rotor. The logic is explained in _rotate_combined.
+        :return: None
+        """
         self._rotate_combined(called_from=self.rotor_bound,
                               coordinates_from=self.coordinates_blade_bound,
                               if_not_do=self.blade_bound,
@@ -164,6 +173,11 @@ class VortexSystem:
         return None
 
     def rotor(self) -> None:
+        """
+        Calculates the vortex system (as in coordinates of the line vortices) of the rotor, meaning its trailing and
+        bound vortex system.
+        :return:
+        """
         self.rotor_trailing()
         self.rotor_bound()
         return None
@@ -227,7 +241,6 @@ class VortexSystem:
         control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :return: None
         """
-
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         if trailing:
@@ -338,13 +351,13 @@ class VortexSystem:
         for t in np.linspace(self.wake_length/(self.wake_speed*self.time_resolution),
                              self.wake_length/self.wake_speed,
                              self.time_resolution-1):
-            angle = self.rotor_rotation_speed*t-np.pi/2 # It is assumed that the rotor is rotating clockwise when
-            # looking downwind. The -np.pi/2 rotate the t=0 position of the blade ot be parallel to the z-axis.
+            angle = -self.rotor_rotation_speed*t+np.pi/2 # It is assumed that the rotor is rotating clockwise when
+            # looking downwind. The +np.pi/2 rotate the t=0 position of the blade to be parallel to the z-axis.
             for i, r in enumerate(self.r_elements):
                 x[r].append(x_swept_trailing_vortices_start[i]+self.wake_speed*t) # pure convection
                 # the first trailing vortex is parallel to the chord
-                y[r].append(-np.sin(angle)*y_swept_trailing_vortices_start[i]+r*np.cos(angle)) # rotated
-                z[r].append(-np.cos(angle)*y_swept_trailing_vortices_start[i]-r*np.sin(angle)) # rotated
+                y[r].append(np.sin(angle)*y_swept_trailing_vortices_start[i]+r*np.cos(angle)) # rotated
+                z[r].append(-np.cos(angle)*y_swept_trailing_vortices_start[i]+r*np.sin(angle)) # rotated
         self.coordinates_blade_trailing_elementwise = {"x": x, "y": y, "z": z}
         return self.coordinates_blade_trailing_elementwise
 
@@ -387,24 +400,24 @@ class VortexSystem:
                              f" {response[vortex_system_type][1]} first.")
         return None
 
-    def _combine_elementwise(self, called_from, coordinates_from, if_not_do, combine_to: str):
+    def _combine_elementwise(self, called_from, coordinates_from, if_not_do, combine_to: str) -> None:
         """
         Combines element-wise coordinates into a np.ndarray of size (N,3).
-        :param called_from:         Which function calls _combine_elementwise()
+        :param called_from:         Which function calls _combine_elementwise(). This is for user error clarification.
         :param coordinates_from:    The element-wise coordinates of the vortex system that are to be combined
         :param if_not_do:           Function that calculates these elementwise coordinates if they are not yet
                                     calculated
         :param save_to:             Class property name as string (without self.) to which the combined coordinates are
                                     saved.
-        :return:
+        :return: None
         """
         self._assert_properties(called_from) # assert that the rotor and wake properties have been set
         if coordinates_from is None: # if the element-wise coordinates do not yet exist
             coordinates_from = if_not_do() # then calculate them
         self.__dict__[combine_to] = np.asarray([ # save combined coordinates to a np.ndarray of size (N,3)
-            [coord for coords in coordinates_from["x"].values() for coord in coords],
-            [coord for coords in coordinates_from["y"].values() for coord in coords],
-            [coord for coords in coordinates_from["z"].values() for coord in coords],
+            [coord for coords in coordinates_from["x"].values() for coord in coords], # this appends all values from
+            [coord for coords in coordinates_from["y"].values() for coord in coords], # the second layer dictionaries
+            [coord for coords in coordinates_from["z"].values() for coord in coords], # to one another (axis-wise).
         ]).T
         return None
 
@@ -417,8 +430,8 @@ class VortexSystem:
         Creates a specific (bound or trailing) vortex system for the specified rotor. It does that by taking the
         specific vortex system from a single blade and rotating it n_blades-1 times. The resulting vortex system is
         saved as a list with the vortex system (size (N,3)) of each blade as a unique entry.
-        :param called_from:         Which function calls _rotate_combined()
-        :param coordinates_from:    Class property in which the combined coordinates are saved
+        :param called_from:         Which function calls _rotate_combined(). This is for user error clarification.
+        :param coordinates_from:    The coordinates of the vortex system that is to be rotated
         :param if_not_do:           Function that calculates the combined coordinates of the vortex system if they are
                                     not yet calculated
         :param save_to:             Class property name as string (without self.) to which the combined coordinates are
@@ -429,8 +442,9 @@ class VortexSystem:
         if coordinates_from is None: # if the combined coordinates do not yet exist
             coordinates_from = if_not_do() # then calculate them
         self.__dict__[rotate_to] = [coordinates_from] # start list with the un-rotated blade vortex system
-        for rot_angle in np.linspace(2*np.pi/self.n_blades, 2*np.pi*(1-1/self.n_blades), self.n_blades-1):
-            rot_matrix = np.array([[1, 0, 0],
+        for rot_angle in np.linspace(2*np.pi/self.n_blades, 2*np.pi*(1-1/self.n_blades), self.n_blades-1): #
+            # calculate the angular positions of the other blades
+            rot_matrix = np.array([[1, 0, 0], # calculate rotation matrix for the current blade
                                    [0, np.cos(rot_angle), np.sin(rot_angle)],
                                    [0, -np.sin(rot_angle), np.cos(rot_angle)]])
             self.__dict__[rotate_to].append(np.dot(coordinates_from, rot_matrix)) # add rotated vortex system
