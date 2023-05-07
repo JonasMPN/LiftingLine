@@ -187,7 +187,32 @@ class VortexSystem:
         Calculates the induction matrix from bound vortices of the rotor on all control points.
         :return: tuple with the induction matrices
         """
-        pass
+        self._assert_bound("rotor")
+
+        n_circulations = len(self.r_elements)-1
+        single_trailing_induction_matrices = {  # the inductions are calculated for individual bound vortex systems
+            # first (debugging help)
+            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
+            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)]
+        }
+        for bound_system_i, bound in enumerate(self.coordinates_rotor_bound):
+            for cp_i, control_point in enumerate(self.control_points):
+                for vortex_i, (vortex_start, vortex_end) in enumerate(zip(bound[:-1], bound[1:])):
+                    induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point)
+                    single_trailing_induction_matrices["x"][bound_system_i][cp_i, vortex_i] = induction_factors[0]
+                    single_trailing_induction_matrices["y"][bound_system_i][cp_i, vortex_i] = induction_factors[1]
+                    single_trailing_induction_matrices["z"][bound_system_i][cp_i, vortex_i] = induction_factors[2]
+
+        induction_matrices = {  # initialise container for the final, summed together induction factor matrices
+            "x": np.zeros((self.n_control_points, n_circulations)),
+            "y": np.zeros((self.n_control_points, n_circulations)),
+            "z": np.zeros((self.n_control_points, n_circulations))
+        }
+        for direction in ["x", "y", "z"]:
+            for induction_mat in single_trailing_induction_matrices[direction]:
+                induction_matrices[direction] += induction_mat  # sum the contributions of all blade wakes
+        return induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]
 
     def trailing_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
@@ -196,14 +221,16 @@ class VortexSystem:
         """
         self._assert_trailing("rotor")  # a rotor wake has to exist
 
-        n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed
-        single_wake_induction_matrices = { # the inductions are calculated for individual wakes first (debugging help)
+        n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed (which has a
+        # constant circulation!)
+        single_trailing_induction_matrices = { # the inductions are calculated for individual trailing vortex systems
+            # first (debugging help)
             "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
             "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
             "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)]
         }
-        for wake_i, wake in enumerate(self.coordinates_rotor_trailing): # iterate over the wakes of each blade
-            for i_cp, control_point in enumerate(self.control_points): # iterate over the control points
+        for wake_system_i, wake in enumerate(self.coordinates_rotor_trailing): # iterate over the wakes of each blade
+            for cp_i, control_point in enumerate(self.control_points): # iterate over the control points
                 for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
                     # element. Every blade element thus influences (thus inducing_element) the current element (which
                     # is therefore called induced_element, because it 'receives' an induced velocity)
@@ -217,9 +244,9 @@ class VortexSystem:
                         induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point)
                     # place the induction factors (x, y, and z component) of this wake in its respective wake
                     # induction matrix
-                    single_wake_induction_matrices["x"][wake_i][i_cp, inducing_element] = induction_factors[0]
-                    single_wake_induction_matrices["y"][wake_i][i_cp, inducing_element] = induction_factors[1]
-                    single_wake_induction_matrices["z"][wake_i][i_cp, inducing_element] = induction_factors[2]
+                    single_trailing_induction_matrices["x"][wake_system_i][cp_i, inducing_element] = induction_factors[0]
+                    single_trailing_induction_matrices["y"][wake_system_i][cp_i, inducing_element] = induction_factors[1]
+                    single_trailing_induction_matrices["z"][wake_system_i][cp_i, inducing_element] = induction_factors[2]
 
         induction_matrices = { # initialise container for the final, summed together induction factor matrices
             "x": np.zeros((self.n_control_points, n_circulations)),
@@ -227,7 +254,7 @@ class VortexSystem:
             "z": np.zeros((self.n_control_points, n_circulations))
         }
         for direction in ["x", "y", "z"]:
-            for induction_mat in single_wake_induction_matrices[direction]:
+            for induction_mat in single_trailing_induction_matrices[direction]:
                 induction_matrices[direction] += induction_mat # sum the contributions of all blade wakes
         return induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]
 
@@ -468,7 +495,9 @@ class VortexSystem:
         R_1 = np.linalg.norm(vec_R_1) # distance between the vortex start point and the induction point
         R_2 = np.linalg.norm(vec_R_2) # distance between the vortex end point and the induction point
         vec_plane_normal = np.cross(vec_R_1, vec_R_2) # vector that's normal on the plane spanned by the three points
-        if not np.any(vec_plane_normal): # this happens when the induction point lies on the extended vortex line
+        if np.linalg.norm(vec_plane_normal) <= 1e-10: # this happens when the induction point lies on the extended
+            # vortex line or very close around it
+            #todo handle control points that lie very close to the vortex core
             return np.zeros(3)
         l_sq_plane_normal = np.dot(vec_plane_normal, vec_plane_normal) # squared length of that plane normal vector
         vec_vortex = vortex_end-vortex_start # vector representing the vortex line
