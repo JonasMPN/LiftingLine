@@ -303,7 +303,7 @@ class VortexSystem:
     def rotor_visualisation(self,
                             trailing: bool=True,
                             bound: bool=True,
-                            control_points: bool=False) -> None:
+                            control_points: bool=False) -> tuple[plt.figure, plt.axes]:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
         Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
@@ -338,8 +338,7 @@ class VortexSystem:
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
-        plt.show()
-        return None
+        return fig, ax
 
     def _blade_bound_elementwise(self) -> dict[str, dict]:
         """
