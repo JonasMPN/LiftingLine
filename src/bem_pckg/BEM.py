@@ -2,10 +2,8 @@ import numpy as np
 from scipy.optimize import brentq, newton, minimize
 import pandas as pd
 import scipy.interpolate as interpolate
-#from helper_functions import Helper
-from bem_pckg.helper_functions import Helper
-#from data_handling import *
-from bem_pckg.data_handling import *
+from helper_functions import Helper
+from data_handling import *
 import scipy
 import matplotlib.pyplot as plt
 helper=Helper()
@@ -79,7 +77,8 @@ class BEM:
         use_as_identifier = {param: value for param, value in (self.constants|locals()).items() if param not in skip}
         identifier = {param: np.ones(resolution-1)*value for param, value in use_as_identifier.items()}
         
-        # This stuff is a bit nasty to work with now. 
+        # M: This stuff is a bit nasty to work with now.
+        # J: How so? Should work just like before.
         #try:
         #    if exists_already(self.df_results, **use_as_identifier):
         #        print(f"BEM already done for {use_as_identifier}, skipping solve().")
