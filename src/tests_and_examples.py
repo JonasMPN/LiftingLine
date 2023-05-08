@@ -1,34 +1,34 @@
 import numpy as np
-from geometry import VortexSystem
+from vortex_system import VortexSystem
 import matplotlib.pyplot as plt
 from helper_functions import Helper
 helper = Helper()
 
 test = {
-    "wake_visualisation": False,
+    "wake_visualisation": True,
     "induction_matrix": False,
-    "lifting_line": True
+    "lifting_line": False
 }
 
 if test["wake_visualisation"]:
     vortex_system = VortexSystem()
     vortex_system.set_blade(0.2+np.linspace(0,1,5), np.linspace(0, 0.2, 5)[::-1], blade_rotation=-0*np.pi/2,
-                            rotor_rotation_speed=np.pi / 4)
-    vortex_system.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=50)
+                            rotor_rotation_speed=np.pi/4, n_blades=3)
+    vortex_system.set_wake(wake_speed=0.5, wake_length=5, resolution=50)
     # vortex_system.blade()
     vortex_system.rotor()
     vortex_system.set_control_points(x_control_points=0,
                                      y_control_points=0.25*np.linspace(0, 0.2, 5)[::-1],
                                      z_control_points=0.2+np.linspace(0,1,5))
     vortex_system.blade_elementwise_visualisation(control_points=True)
-    vortex_system.rotor_visualisation(control_points=True)
+    # vortex_system.rotor_visualisation(control_points=True)
 
 
 if test["induction_matrix"]:
     vortex_system = VortexSystem()
     vortex_system.set_blade(0.2+np.linspace(0,1,5), 1, blade_rotation=-0*np.pi/2,
                             rotor_rotation_speed=0*np.pi/4, n_blades=1)
-    vortex_system.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=3)
+    vortex_system.set_wake(wake_speed=0.5, wake_length=5, resolution=3)
     # vortex_system.blade()
     vortex_system.rotor()
     vortex_system.set_control_points(x_control_points=0.25,
@@ -49,7 +49,7 @@ if test["induction_matrix"]:
 
 if test["lifting_line"]:
     # tests the lifting line model for a rectangular flat plate. Assumed density=1 and chord=1.
-    time_resolution = 20 # number of shed trailing vortex lines
+    resolution = 20 # number of shed trailing vortex lines
     wake_length = 20
     aspect_ratio = 34 # aspect ratio of the flat plate. Influences the number of control points (by influencing the
     # number of plate elements)
@@ -63,7 +63,7 @@ if test["lifting_line"]:
     vortex_system.set_blade(r_elements=r, c_elements=1, blade_rotation=np.deg2rad(aoa)-np.pi/2, rotor_rotation_speed=0,
                             n_blades=1) # define a flat plate by constant chord length, no rotational speed and only
     # one blade
-    vortex_system.set_wake_properties(wake_speed=inflow_speed, wake_length=wake_length, time_resolution=time_resolution)
+    vortex_system.set_wake(wake_speed=inflow_speed, wake_length=wake_length, resolution=resolution)
     vortex_system.rotor() # calculate the vortex system of the rotor (meaning bound and trailing vortices)
     # now set the control points on the quarter chord of the plate in the middle of each plate element
     vortex_system.set_control_points(x_control_points=1/4*np.cos(np.deg2rad(aoa)),

@@ -82,7 +82,7 @@ class VortexSystem:
         self.rotor_set = True
         return None
 
-    def set_wake_properties(self, wake_speed: float, wake_length: float, time_resolution: int) -> None:
+    def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         self._set(**{param: value for param, value in locals().items() if param != "self"})
         # error clarification for user
         self.wake_set = True
@@ -303,7 +303,8 @@ class VortexSystem:
     def rotor_visualisation(self,
                             trailing: bool=True,
                             bound: bool=True,
-                            control_points: bool=False) -> tuple[plt.figure, plt.axes]:
+                            control_points: bool=False,
+                            show: bool=True) -> None or tuple[plt.figure, plt.axes]:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
         Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
@@ -338,7 +339,11 @@ class VortexSystem:
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
-        return fig, ax
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig, ax
 
     def _blade_bound_elementwise(self) -> dict[str, dict]:
         """
