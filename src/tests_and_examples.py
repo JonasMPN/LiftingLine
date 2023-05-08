@@ -5,9 +5,9 @@ from helper_functions import Helper
 helper = Helper()
 
 test = {
-    "wake_visualisation": True,
-    "induction_matrix": False,
-    "lifting_line": False
+    "wake_visualisation": False,
+    "induction_matrix": True,
+    "lifting_line": True
 }
 
 if test["wake_visualisation"]:
@@ -70,9 +70,9 @@ if test["lifting_line"]:
                                      y_control_points=1/4*np.sin(np.deg2rad(aoa)),
                                      z_control_points=1/2*(r[:-1]+r[1:]))
 
-    fig, ax = vortex_system.rotor_visualisation(control_points=True) # plot vortex system
-    helper.handle_axis(ax, x_label="x", y_label="y", y_lim=(0,1), grid=True) # visual modifications
-    # plt.show() # uncomment this line to show the plot
+    # fig, ax = vortex_system.rotor_visualisation(control_points=True, show=False) # plot vortex system
+    # helper.handle_axis(ax, x_label="x", y_label="y", y_lim=(0,1), grid=True) # visual modifications
+    # plt.show() # uncomment above three lines to show the plot
 
     t_ind_u, t_ind_v, t_ind_w = vortex_system.trailing_induction_matrices() # calculate the trailing induction matrices
     b_ind_u, b_ind_v, b_ind_w = vortex_system.bound_induction_matrices() # calculate the bound induction matrices
