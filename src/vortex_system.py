@@ -19,7 +19,7 @@ class VortexSystem:
         # wake properties
         self.wake_speed = None
         self.wake_length = None
-        self.time_resolution = None
+        self.resolution = None
 
         # control points
         self.control_points = None
@@ -236,9 +236,9 @@ class VortexSystem:
                     # is therefore called induced_element, because it 'receives' an induced velocity)
 
                     # get the start points of each vortex element of the trailing vortex from the inducing blade element
-                    vortex_starts = wake[inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)-1]
+                    vortex_starts = wake[inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)-1]
                     # get the end points of each vortex element of the trailing vortex from the inducing blade element
-                    vortex_ends = wake[1+inducing_element*(self.time_resolution+1):(inducing_element+1)*(self.time_resolution+1)]
+                    vortex_ends = wake[1+inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)]
                     induction_factors = np.zeros(3)
                     for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
                         induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point)
@@ -319,9 +319,9 @@ class VortexSystem:
             self._assert_trailing("rotor")
             for trailing, c in zip(self.coordinates_rotor_trailing, colours[:len(self.coordinates_rotor_trailing)]):
                 for element in range(n_elements):
-                    ax.plot(trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 0],
-                            trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 1],
-                            trailing[element*(self.time_resolution+1):(element+1)*(self.time_resolution+1), 2], color=c)
+                    ax.plot(trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 0],
+                            trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 1],
+                            trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 2], color=c)
         if bound:
             self._assert_bound("rotor")
             for bound, c in zip(self.coordinates_rotor_bound, colours[:len(self.coordinates_rotor_trailing)]):
@@ -379,9 +379,9 @@ class VortexSystem:
         x = {r: [x_qc[i], x_swept_trailing_vortices_start[i]] for i, r in enumerate(self.r_elements)}
         y = {r: [y_qc[i], y_swept_trailing_vortices_start[i]] for i, r in enumerate(self.r_elements)}
         z = {r: [r, r] for r in self.r_elements}
-        for t in np.linspace(self.wake_length/(self.wake_speed*self.time_resolution),
+        for t in np.linspace(self.wake_length/(self.wake_speed*self.resolution),
                              self.wake_length/self.wake_speed,
-                             self.time_resolution-1):
+                             self.resolution-1):
             angle = -self.rotor_rotation_speed*t+np.pi/2 # It is assumed that the rotor is rotating clockwise when
             # looking downwind. The +np.pi/2 rotate the t=0 position of the blade to be parallel to the z-axis.
             for i, r in enumerate(self.r_elements):

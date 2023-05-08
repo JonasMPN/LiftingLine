@@ -21,7 +21,7 @@ if test["wake_visualisation"]:
                                      y_control_points=0.25*np.linspace(0, 0.2, 5)[::-1],
                                      z_control_points=0.2+np.linspace(0,1,5))
     vortex_system.blade_elementwise_visualisation(control_points=True)
-    # vortex_system.rotor_visualisation(control_points=True)
+    vortex_system.rotor_visualisation(control_points=True)
 
 
 if test["induction_matrix"]:
