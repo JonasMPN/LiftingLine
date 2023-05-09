@@ -392,45 +392,6 @@ class VortexSystem:
         self.coordinates_blade_trailing_elementwise = {"x": x, "y": y, "z": z}
         return self.coordinates_blade_trailing_elementwise
 
-    def _set(self, **kwargs) -> None:
-        """
-        Sets parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
-        :param kwargs:
-        :return:
-        """
-        existing_parameters = [*self.__dict__]
-        for parameter, value in kwargs.items():
-            if parameter not in existing_parameters:
-                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
-            self.__dict__[parameter] = value
-        return None
-
-    def _assert_properties(self, fnc):
-        for params, was_set in {"rotor": self.rotor_set, "wake": self.wake_set}.items():
-            if not was_set:
-                raise ValueError(f"{params} properties have to be set before using {fnc.__name__}().")
-        return None
-
-    def _assert_trailing(self, vortex_system_type):
-        response = {
-            "blade": [self.coordinates_blade_trailing, "rotor_trailing(), blade_trailing(), rotor(), or blade()"],
-            "rotor": [self.coordinates_rotor_trailing, "rotor_trailing() or rotor()"]
-        }
-        if response[vortex_system_type][0] is None:
-            raise ValueError(f"A {vortex_system_type} trailing vortex system has to be calculated first. Use"
-                             f" {response[vortex_system_type][1]} first.")
-        return None
-
-    def _assert_bound(self, vortex_system_type):
-        response = {
-            "blade": [self.coordinates_blade_bound, "rotor_bound(), blade_bound(), rotor(), or blade()"],
-            "rotor": [self.coordinates_rotor_bound, "rotor_bound() or rotor()"]
-        }
-        if response[vortex_system_type][0] is None:
-            raise ValueError(f"A {vortex_system_type} bound vortex system has to be calculated first. Use"
-                             f" {response[vortex_system_type][1]} first.")
-        return None
-
     def _combine_elementwise(self, called_from, coordinates_from, if_not_do, combine_to: str) -> None:
         """
         Combines element-wise coordinates into a np.ndarray of size (N,3).
@@ -479,6 +440,45 @@ class VortexSystem:
                                    [0, np.cos(rot_angle), np.sin(rot_angle)],
                                    [0, -np.sin(rot_angle), np.cos(rot_angle)]])
             self.__dict__[rotate_to].append(np.dot(coordinates_from, rot_matrix)) # add rotated vortex system
+        return None
+
+    def _set(self, **kwargs) -> None:
+        """
+        Sets parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
+        :param kwargs:
+        :return:
+        """
+        existing_parameters = [*self.__dict__]
+        for parameter, value in kwargs.items():
+            if parameter not in existing_parameters:
+                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
+            self.__dict__[parameter] = value
+        return None
+
+    def _assert_properties(self, fnc):
+        for params, was_set in {"rotor": self.rotor_set, "wake": self.wake_set}.items():
+            if not was_set:
+                raise ValueError(f"{params} properties have to be set before using {fnc.__name__}().")
+        return None
+
+    def _assert_trailing(self, vortex_system_type):
+        response = {
+            "blade": [self.coordinates_blade_trailing, "rotor_trailing(), blade_trailing(), rotor(), or blade()"],
+            "rotor": [self.coordinates_rotor_trailing, "rotor_trailing() or rotor()"]
+        }
+        if response[vortex_system_type][0] is None:
+            raise ValueError(f"A {vortex_system_type} trailing vortex system has to be calculated first. Use"
+                             f" {response[vortex_system_type][1]} first.")
+        return None
+
+    def _assert_bound(self, vortex_system_type):
+        response = {
+            "blade": [self.coordinates_blade_bound, "rotor_bound(), blade_bound(), rotor(), or blade()"],
+            "rotor": [self.coordinates_rotor_bound, "rotor_bound() or rotor()"]
+        }
+        if response[vortex_system_type][0] is None:
+            raise ValueError(f"A {vortex_system_type} bound vortex system has to be calculated first. Use"
+                             f" {response[vortex_system_type][1]} first.")
         return None
 
     @staticmethod
