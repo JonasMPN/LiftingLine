@@ -449,8 +449,7 @@ class VortexSystem:
         :param if_not_do:           Function that calculates these elementwise coordinates if they are not yet
                                     calculated
         :param save_to:             Class property name as string (without self.) to which the combined coordinates are
-                                    saved.
-        :return: None
+                                    saved.  :return: None
         """
         self._assert_properties(called_from) # assert that the rotor and wake properties have been set
         if coordinates_from is None: # if the element-wise coordinates do not yet exist
@@ -504,21 +503,21 @@ class VortexSystem:
         :param induction_point:
         :return:
         """
-        vec_R_1 = induction_point-vortex_start # vector from vortex_start to the induction point
-        vec_R_2 = induction_point-vortex_end # vector from vortex_end to the induction point
-        R_1 = np.linalg.norm(vec_R_1) # distance between the vortex start point and the induction point
-        R_2 = np.linalg.norm(vec_R_2) # distance between the vortex end point and the induction point
-        vec_plane_normal = np.cross(vec_R_1, vec_R_2) # vector that's normal on the plane spanned by the three points
-        if np.linalg.norm(vec_plane_normal) <= 1e-10: # this happens when the induction point lies on the extended
-            # vortex line or very close around it
-            #todo handle control points that lie very close to the vortex core
+        r_s = vortex_start-induction_point # vector from induction point to the start of the vortex
+        r_e = vortex_end-induction_point # vector from the induction point to the end of the vortex
+        r_v = vortex_start-vortex_end # vector representing the vortex
+
+        l_s = np.linalg.norm(r_s) # distance between the induction point and the start of the vortex
+        l_e = np.linalg.norm(r_e) # distance between the induction point and the end of the vortex
+        l_v = np.linalg.norm(r_v) # length of the vortex
+
+        h = np.linalg.norm(np.cross(r_v, r_s))/l_v # shortest distance between the control point and an infinite
+        # extension of the vortex filament
+        if h <= 1e-10: # the control point lies too close normal to the vortex line
+            # todo handle control points that lie very close to the vortex core
             return np.zeros(3)
-        l_sq_plane_normal = np.dot(vec_plane_normal, vec_plane_normal) # squared length of that plane normal vector
-        vec_vortex = vortex_end-vortex_start # vector representing the vortex line
-        fac_1 = np.dot(vec_vortex, vec_R_1) # zero clue what this does later
-        fac_2 = np.dot(vec_vortex, vec_R_2) # zero clues what this does later
-        K = 1/(4*np.pi*l_sq_plane_normal)*(fac_1/R_1-fac_2/R_2) # some magic factor
-        return K*vec_plane_normal # boom done
+        e_i = np.cross(r_v, r_s)/(h*l_v) # unit vector of the direction of induced velocity
+        return  e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e)))
 
     @staticmethod
     def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
