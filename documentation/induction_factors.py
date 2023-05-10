@@ -1,47 +1,29 @@
 import numpy as np
 
-def vortex_induction_factors_Carlos(vortex_start: np.ndarray,
-                                    vortex_end: np.ndarray,
-                                    induction_point: np.ndarray) -> np.ndarray:
-    vec_R_1 = induction_point - vortex_start
-    vec_R_2 = induction_point - vortex_end
-    R_1 = np.linalg.norm(vec_R_1)
-    R_2 = np.linalg.norm(vec_R_2)
-    R_1_2 = np.cross(vec_R_1, vec_R_2)
-    R_1_2_sqr = np.dot(R_1_2, R_1_2)
-    vec_vortex = vortex_end - vortex_start
-    R_0_1 = np.dot(vec_vortex, vec_R_1)
-    R_0_2 = np.dot(vec_vortex, vec_R_2)
-    K = 1/(4*np.pi*R_1_2_sqr)*(R_0_1/R_1-R_0_2/R_2)
-    return K*R_1_2
+def vortex_induction_factor(vortex_start: np.ndarray,
+							vortex_end: np.ndarray,
+							induction_point: np.ndarray) -> np.ndarray:
+	"""
+	This function calculates the induction at a point 'induction_point' from a straight vortex line between the
+	two points 'vortex_start' and 'vortex_end' for a unity circulation. The returned value is a vector of induced
+	velocities.
+	:param vortex_start: numpy array of size (3,)
+	:param vortex_end: numpy array of size (3,)
+	:param induction_point: numpy array of size (3,)
+	:return:
+	"""
+	r_s = induction_point-vortex_start  # vector from induction point to the start of the vortex
+	r_e = induction_point-vortex_end  # vector from the induction point to the end of the vortex
+	r_v = vortex_end-vortex_start  # vector representing the vortex
 
-def vortex_induction_factors_Jonas(vortex_start: np.ndarray,
-                                   vortex_end: np.ndarray,
-                                   induction_point: np.ndarray) -> np.ndarray:
-    r_s = induction_point-vortex_start
-    r_e = induction_point-vortex_end
-    r_v = vortex_end-vortex_start
+	l_s = np.linalg.norm(r_s)  # distance between the induction point and the start of the vortex
+	l_e = np.linalg.norm(r_e)  # distance between the induction point and the end of the vortex
+	l_v = np.linalg.norm(r_v)  # length of the vortex
 
-    l_s = np.linalg.norm(r_s)
-    l_e = np.linalg.norm(r_e)
-    l_v = np.linalg.norm(r_v)
-
-    h = np.linalg.norm(np.cross(r_v, r_s))/l_v
-    e_i = np.cross(r_v, r_s)/(h*l_v)
-    return e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_e/l_e-r_s/l_s)))
-
-n_vortex_elements = 10
-control_point = np.random.random(3)
-all_same = True
-for n in range(n_vortex_elements):
-    vortex_start = np.random.random(3)
-    vortex_end = np.random.random(3)
-    facs_Carlos = vortex_induction_factors_Carlos(vortex_start, vortex_end, control_point)
-    facs_Jonas = vortex_induction_factors_Jonas(vortex_start, vortex_end, control_point)
-    if np.linalg.norm(facs_Carlos-facs_Jonas) > 1e-15:
-        print(f"Induction factors are different for vortex from {vortex_start} to {vortex_end}", "\n",
-              f"Carlos: {facs_Carlos}", "\n",
-              f"Jonas: {facs_Jonas}")
-        all_same = False
-if all_same:
-    print("All induction factors are the same")
+	h = np.linalg.norm(np.cross(r_v, r_s))/l_v  # shortest (normal) distance between the control point and an
+	# infinite extension of the vortex filament
+	if h <= 1e-10:  # the control point lies too close normal to the vortex line
+		# todo handle control points that lie very close to the vortex core
+		return np.zeros(3)  # for now assume no induction
+	e_i = np.cross(r_v, r_s)/(h*l_v)  # unit vector of the direction of induced velocity
+	return e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e)))
