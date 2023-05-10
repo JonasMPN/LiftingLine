@@ -1,8 +1,6 @@
 import numpy as np
 
-def vortex_induction_factor(vortex_start: np.ndarray,
-							vortex_end: np.ndarray,
-							induction_point: np.ndarray) -> np.ndarray:
+def vortex_induction_factor(vortex_start: np.ndarray, vortex_end: np.ndarray, induction_point: np.ndarray) -> np.ndarray:
 	"""
 	This function calculates the induction at a point 'induction_point' from a straight vortex line between the
 	two points 'vortex_start' and 'vortex_end' for a unity circulation. The returned value is a vector of induced
