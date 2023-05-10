@@ -7,6 +7,9 @@ import matplotlib.pyplot as plt
 
 class VortexSystem:
     def __init__(self):
+        """
+        Initialize empty object
+        """
         # blade properties
         self.r_elements = None
         self.c_elements = None
@@ -47,6 +50,8 @@ class VortexSystem:
                   n_blades: int = 3
                   ) -> None:
         """
+        Set the blade geometry parameters (blade discretization, chord per element, twist/pitch, number of blades), and the rotation speed 
+
         The rotor coordinate system is such that the x faces downwind along the rotor axis, y faces to the left
         facing the rotor from the front (i.e. looking downwind) and z point upwards. z goes along the leading edge of a
         blade that is point upward. All angles follow a standard right-hand rule.
@@ -60,8 +65,9 @@ class VortexSystem:
         :return:                        None
         """
         self.r_elements = r_elements
-        # checks if a list of chord and blade rotations is given. if not, create a list with the uniform value
+        # checks if a list of chord and blade rotations is given. if not, create a list with the uniform value using the _float_to_ndarray function
         self.c_elements, self.blade_rotation = self._float_to_ndarray(len(r_elements), c_elements, blade_rotation)
+        # Ensure that the provided arrays have the same length as the elment array, raise error otherwise
         if self.r_elements.shape != self.c_elements.shape or self.r_elements.shape  != self.blade_rotation.shape:
             raise ValueError("'r_elements', 'c_elements', and 'blade_rotation' do not have the same length. This only "
                              "happens if 'c_elements' or 'blade_rotation' are specified as a list. The shapes are:"
@@ -83,7 +89,11 @@ class VortexSystem:
         return None
 
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
+        """
+        Calls a function to define the wake and change the wake status.
+        """
         self._set(**{param: value for param, value in locals().items() if param != "self"})
+        # Set a property of the object to indicate, whether the wake is already defined 
         # error clarification for user
         self.wake_set = True
         return None
@@ -394,12 +404,12 @@ class VortexSystem:
 
     def _set(self, **kwargs) -> None:
         """
-        Sets parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
+        Sets any parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
         :param kwargs:
         :return:
         """
         existing_parameters = [*self.__dict__]
-        for parameter, value in kwargs.items():
+        for parameter, value in kwargs.items(): # puts the touples of parameters and values
             if parameter not in existing_parameters:
                 raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
             self.__dict__[parameter] = value
@@ -512,5 +522,8 @@ class VortexSystem:
 
     @staticmethod
     def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
+        """
+        Loops through the input arguments to ensure they are numpy arrays. If a float is given, it is turned into an array of length with a uniform value of the float.
+        """
         return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
                 args]
