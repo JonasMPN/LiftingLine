@@ -91,6 +91,9 @@ class VortexSystem:
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
         Calls a function to define the wake and change the wake status.
+        
+        What is the dimensions here? is the wake length in diameter or in length units?
+        What resolution is this? Along the blade span or along a trailing vortex?
         """
         self._set(**{param: value for param, value in locals().items() if param != "self"})
         # Set a property of the object to indicate, whether the wake is already defined 
@@ -103,14 +106,17 @@ class VortexSystem:
                            y_control_points: float or np.ndarray,
                            z_control_points: float or np.ndarray) -> None:
         """
+        Sets the control point coordinates for the blade 
+
         The control points are specified by their individual coordinates. If an array of coordinates is given then
         that array must be a single row or single column array. The control points are internally saved as a list of
         (1,3) sized np.ndarrays.
-        :param x_control_points:
-        :param y_control_points:
-        :param z_control_points:
+        :param x_control_points: list/array of x coordinates 
+        :param y_control_points: -"- y coordinates
+        :param z_control_points: -"- z coordinates
         :return: None
         """
+        # 1. Check dimesions  
         # check how many coordinates are given per axis
         n_x = 1 if type(x_control_points) == float or type(x_control_points) == int else x_control_points.size
         n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
@@ -119,6 +125,8 @@ class VortexSystem:
         if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions match
             raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
                              f"n_z] = {lengths}")
+
+        # 2. Actual assignment of the values
         self.n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
         x_cp, y_cp, z_cp = self._float_to_ndarray(self.n_control_points, x_control_points, y_control_points,
                                                   z_control_points)
@@ -227,7 +235,7 @@ class VortexSystem:
     def trailing_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from the wake of the rotor on all control points.
-        :return: tuple with the induction matrices
+        :return: tuple with the induction matrices for u, v and w
         """
         self._assert_trailing("rotor")  # a rotor wake has to exist
 
@@ -467,9 +475,17 @@ class VortexSystem:
                          if_not_do,
                          rotate_to: str) -> None:
         """
-        Creates a specific (bound or trailing) vortex system for the specified rotor. It does that by taking the
+        Creates a specific (bound or trailing) vortex system for the specified rotor. 
+
+        It does that by taking the
         specific vortex system from a single blade and rotating it n_blades-1 times. The resulting vortex system is
         saved as a list with the vortex system (size (N,3)) of each blade as a unique entry.
+
+        So
+        - the list has so many entries as there are blades
+        - every entry represents one vortex line for a single blade
+        - columns: X, Y, Z
+        - rows: points along the span
         :param called_from:         Which function calls _rotate_combined(). This is for user error clarification.
         :param coordinates_from:    The coordinates of the vortex system that is to be rotated
         :param if_not_do:           Function that calculates the combined coordinates of the vortex system if they are
