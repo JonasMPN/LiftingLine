@@ -539,6 +539,10 @@ class VortexSystem:
     def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
         """
         Loops through the input arguments to ensure they are numpy arrays. If a float is given, it is turned into an array of length with a uniform value of the float.
+
+        There is a bug !
+        The type checking is not a valid way to figure out the size. So if the input is a list instead of a numpy array, this behaviour breaks
         """
-        return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
+        # return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
+        return [np.array(arg) if len(arg) != 1  else np.asarray([arg for _ in range(length)]) for arg in
                 args]
