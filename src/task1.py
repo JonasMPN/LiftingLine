@@ -80,7 +80,7 @@ def calc_velocity(u_infty: float, omega: float,
     """
     Compute the velocity components as the sum of far field velocity, rotation, and the induced velocity field and return a dict.
     """
-
+    #breakpoint()
     u = u_infty + u_induced     # x-component
     v = omega * radial_positions + v_induced   # y - component
     velocity_magnitude = np.sqrt(u**2 + v**2) # absolute
@@ -104,9 +104,9 @@ def task1(debug=False):
     inner_radius = 0.2 * radius         # inner end of the blade section
     pitch_deg = -2                      # pitch in degrees
     pitch = np.radians(pitch_deg)       # pitch angle in radian
-    resolution = 5                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
-    residual_max = 10^-5
-    n_iter_max
+    resolution = 30                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
+    residual_max = 10**-5
+    n_iter_max = 100
     
     ### Operational data 
     v_0 = 10                            # [m] Wind speed
@@ -122,7 +122,7 @@ def task1(debug=False):
     # uniform
     radii = np.linspace(inner_radius, radius, resolution)
     radii_centre_list = np.array([0.5*(radii[i] + radii[i+1]) for i in range(len(radii)-1)] ) 
-    twist_list_centre = np.array([twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list])  # Get the twist
+    twist_list_centre = np.array([twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list])  # Get the twist in radian
     chord_list_centre = np.array([twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list] ) # Get the chord
      
     # changed to taking at the edges of an element.... if that really makes sense needs to be discussed
@@ -164,7 +164,6 @@ def task1(debug=False):
     #------------------------------------------------------#
     # PART 3 - Compute matrices
     #------------------------------------------------------#
-    breakpoint()    
     # 3.1 Set Control points
     vortex_system.set_control_points(x_control_points=np.multiply(1/4*chord_list_centre,  np.cos(twist_list_centre + pitch)),
                                      y_control_points=np.multiply(1/4*chord_list_centre,  np.sin(twist_list_centre + pitch)),
@@ -184,36 +183,52 @@ def task1(debug=False):
     v_induced = np.zeros(len(radii_centre_list))
     inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
     # We can compute the effective angle of attack with it
-    effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
-    breakpoint()
-    lift = calc_lift(np.deg2rad(effective_aoa), chord_list_centre, inflow_velocity["magnitude"])
+    # -> This needs to be changed -> shouldnt use induced velocity for that
+    #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
+    #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities
+    #effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    #breakpoint()
+    lift = calc_lift(effective_aoa, chord_list_centre, inflow_velocity["magnitude"])
+   
+    # add relaxation
     # from the lift we can obtain the bound circulation
     bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"]) # compute with the magnitude -> is that so exact ? 
     # The trailing circulation is the delta between two bound circulations, or the "step"
+    #breakpoint()
     trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
-    trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
+    #trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
 
     # Everything is defined, now create a loop to iterate over the circulations
     residual = 1
     n_iter = 0
     L_mag_new = 0
-    while residual > residual_max && n_iter<=n_iter_max:
-        if False: # WORK IN PROGRESS
-            L_mag = L_mag_new
-            u_ind = t_ind_u@trailing_circulation + b_ind_u@bound_circulation # calculate stream-wise induction
-            V = t_ind_v@trailing_circulation + b_ind_v@bound_circulation # calculate downwash
-            U = U_inflow+u_ind # resulting stream-wise velocity
-            inflow_speed = np.sqrt(U*U+V*V) # new velocity magnitude per control point
-            eff_aoa = aoa + np.rad2deg(np.arctan(-V/U)) # new effective angle of attack per control point
-            L = lift(eff_aoa, inflow_speed) # new lift per control point
-            L_mag_new = np.sum(L)
-
-            bound_circulation = circulation(L, inflow_speed) # new bound circulation
-            trailing_circulation = np.append(0, bound_circulation)-np.append(bound_circulation, 0)
-            trailing_circulation = np.reshape(trailing_circulation, (r.size, 1)) # new trailing vortices
-
+    while residual > residual_max and n_iter<=n_iter_max:
+        L_mag = L_mag_new
+        u_induced = trailing_mat_u @ trailing_circulation + bound_mat_u @ bound_circulation # calculate stream-wise induction
+        v_induced = trailing_mat_v @ trailing_circulation + bound_mat_v @ bound_circulation # calc azimuthal velocity / downwash
+        inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
+        U = inflow_velocity["u"] 
+        V = inflow_velocity["v"] 
+        #breakpoint()
+        #effective_aoa = twist_list_centre + np.arctan(-inflow_velocity["v"]/inflow_velocity["u"]) 
+        effective_aoa = -twist_list_centre + np.arctan(inflow_velocity["u"]/inflow_velocity["v"]) 
+        lift = calc_lift(np.deg2rad(effective_aoa), chord_list_centre, inflow_velocity["magnitude"])
+        # from the lift we can obtain the bound circulation
+        bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"]) # compute with the magnitude -> is that so exact ? 
+        trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
+        #trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
+        
+        L_mag_new = np.sum(lift)
+        residual = np.abs(L_mag - L_mag_new) 
+        # update circulation
+        print(f"Iter: {n_iter} \t residual: {residual}")
         n_iter +=1
-
+    fig, axs = plt.subplots(3,1)
+    axs[0].plot(radii_centre_list, bound_circulation)
+    axs[1].plot(trailing_circulation)
+    axs[2].plot(radii_centre_list, lift)
+    plt.show()
 
 if __name__=="__main__":
     task1(debug=False)
