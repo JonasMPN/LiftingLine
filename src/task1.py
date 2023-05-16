@@ -94,17 +94,18 @@ def task1(debug=False):
     - computing the induction via bem
     - set up the wake accordingly
     - create the matrix system for the geometrical induction via the vortices
-    - solve for circulation
+    - solve for circulation iteratively
     
-    step 2 to 4 need to be implemented still
+    step 4 needs debugging
     """
+    
     #### Get all the inputs 
     radius = 50                         # radius of the rotor
     n_blades = 3                        # number of blades
     inner_radius = 0.2 * radius         # inner end of the blade section
     pitch_deg = -2                      # pitch in degrees
     pitch = np.radians(pitch_deg)       # pitch angle in radian
-    resolution = 30                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
+    resolution = 25                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
     residual_max = 10**-5
     n_iter_max = 100
     
@@ -119,11 +120,11 @@ def task1(debug=False):
     ##!!!!!!! Needs to be adapted!
     # Get the positions along the span for each element and the nodes
     # Compute discretization of the blade:
-    # uniform
-    radii = np.linspace(inner_radius, radius, resolution)
-    radii_centre_list = np.array([0.5*(radii[i] + radii[i+1]) for i in range(len(radii)-1)] ) 
-    twist_list_centre = np.array([twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list])  # Get the twist in radian
-    chord_list_centre = np.array([twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list] ) # Get the chord
+    # uniform distribution (for now)
+    radii = np.linspace(inner_radius, radius, resolution) # radial positions of the ends of each section
+    radii_centre_list = np.array([0.5*(radii[i] + radii[i+1]) for i in range(len(radii)-1)] )  # centre of sections
+    twist_list_centre = np.array([twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list])  # Get the twist in radian at the centers
+    chord_list_centre = np.array([twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list] ) # Get the chord at the centers
      
     # changed to taking at the edges of an element.... if that really makes sense needs to be discussed
     twist_list = np.array( [twist_chord.get_twist(r, radius) for r in radii])  # Get the twist at boundary locations
@@ -135,7 +136,7 @@ def task1(debug=False):
     
     # With the induction the 
     induction = calc_induction_bem(tsr,-2)
-
+    print("BEM done")
     #------------------------------------------------------#
     # PART 2 - set up wake system
     #------------------------------------------------------#
@@ -152,7 +153,7 @@ def task1(debug=False):
     # initializy wake geometry
     vortex_system = VortexSystem()
     vortex_system.set_blade(radii, chord_list, blade_rotation=twist_list + pitch, 
-                            rotor_rotation_speed=omega)
+                            rotor_rotation_speed=omega) # The twist list at the boundaries should be required only for the computation of the wake -> which way the 
     #wake.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=50)
     # set the properties of the wake. note that the resolution here should be something related to the discretization of the trailing vortices rather than the discretization of the blade
     vortex_system.set_wake(wake_speed=wake_speed, wake_length=wake_length, resolution=time_resolution)
@@ -186,8 +187,8 @@ def task1(debug=False):
     # -> This needs to be changed -> shouldnt use induced velocity for that
     #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
     #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities
-    #effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
-    effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    #effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
     #breakpoint()
     lift = calc_lift(effective_aoa, chord_list_centre, inflow_velocity["magnitude"])
    
@@ -224,10 +225,12 @@ def task1(debug=False):
         # update circulation
         print(f"Iter: {n_iter} \t residual: {residual}")
         n_iter +=1
-    fig, axs = plt.subplots(3,1)
+    fig, axs = plt.subplots(5,1)
     axs[0].plot(radii_centre_list, bound_circulation)
     axs[1].plot(trailing_circulation)
     axs[2].plot(radii_centre_list, lift)
+    axs[3].plot(radii_centre_list, u_induced)
+    axs[4].plot(radii_centre_list, v_induced)
     plt.show()
 
 if __name__=="__main__":
