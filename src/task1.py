@@ -88,7 +88,7 @@ def calc_velocity(u_infty: float, omega: float,
 
 def task1(debug=False):
     """
-    Function to combine all operations in task 1 
+    Function to combine all operations in Task 1 
 
     That is:
     - computing the induction via bem
@@ -105,7 +105,7 @@ def task1(debug=False):
     inner_radius = 0.2 * radius         # inner end of the blade section
     pitch_deg = -2                      # pitch in degrees
     pitch = np.radians(pitch_deg)       # pitch angle in radian
-    resolution = 25                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
+    resolution = 5                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
     residual_max = 10**-5
     n_iter_max = 100
     
@@ -147,7 +147,7 @@ def task1(debug=False):
     omega = tsr*v_0/radius
     wake_speed = (1-induction)*v_0  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
     wake_length = 1 * 2 * radius # how many diameters should the wake have?
-    time_resolution = 500
+    time_resolution = 300
 
     
     # initializy wake geometry
@@ -166,29 +166,32 @@ def task1(debug=False):
     # PART 3 - Compute matrices
     #------------------------------------------------------#
     # 3.1 Set Control points
+    print("Create vortex system")
     vortex_system.set_control_points(x_control_points=np.multiply(1/4*chord_list_centre,  np.cos(twist_list_centre + pitch)),
                                      y_control_points=np.multiply(1/4*chord_list_centre,  np.sin(twist_list_centre + pitch)),
                                      z_control_points=radii_centre_list)
 
     # 3.2 Create the matrices connecting the circulation and the velocity field
 
+    print("Create induction matrices")
     trailing_mat_u, trailing_mat_v, trailing_mat_w = vortex_system.trailing_induction_matrices() # calculate the trailing induction matrices
     bound_mat_u, bound_mat_v, bound_mat_w = vortex_system.bound_induction_matrices() # calculate the bound induction matrices
     
     #------------------------------------------------------#
     # PART 4 - Iterate to find the right circulation
     #------------------------------------------------------#
-   
+    
+    print("Initialize values")
     # 4.1 Initialize the arrays for the velocity
     u_induced = np.zeros(len(radii_centre_list))
     v_induced = np.zeros(len(radii_centre_list))
     inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
     # We can compute the effective angle of attack with it
     # -> This needs to be changed -> shouldnt use induced velocity for that
-    #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
+   # effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
     #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities
-    effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
-    #effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    #effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
+    effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
     #breakpoint()
     lift = calc_lift(effective_aoa, chord_list_centre, inflow_velocity["magnitude"])
    
@@ -205,7 +208,7 @@ def task1(debug=False):
     n_iter = 0
     L_mag_new = 0
     while residual > residual_max and n_iter<=n_iter_max:
-        L_mag = L_mag_new
+        L_mag = L_mag_new # magnitude of the lift
         u_induced = trailing_mat_u @ trailing_circulation + bound_mat_u @ bound_circulation # calculate stream-wise induction
         v_induced = trailing_mat_v @ trailing_circulation + bound_mat_v @ bound_circulation # calc azimuthal velocity / downwash
         inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
@@ -213,7 +216,7 @@ def task1(debug=False):
         V = inflow_velocity["v"] 
         #breakpoint()
         #effective_aoa = twist_list_centre + np.arctan(-inflow_velocity["v"]/inflow_velocity["u"]) 
-        effective_aoa = -twist_list_centre + np.arctan(inflow_velocity["u"]/inflow_velocity["v"]) 
+        effective_aoa = -twist_list_centre + pitch + np.arctan(inflow_velocity["u"]/inflow_velocity["v"]) 
         lift = calc_lift(np.deg2rad(effective_aoa), chord_list_centre, inflow_velocity["magnitude"])
         # from the lift we can obtain the bound circulation
         bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"]) # compute with the magnitude -> is that so exact ? 
