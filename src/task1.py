@@ -63,16 +63,17 @@ def calc_lift(aoa: np.array, chord: np.array, inflow_speed: np.array, rho : floa
     lift = 0.5 * rho * inflow_speed**2 * cl  
     return lift
 
-def calc_circulation(lift: np.array, u_inflow: float, rho:float=1.225 ) -> np.array:
+def calc_circulation(lift: np.array, u_inflow: float, old_circulation: np.array, rho:float=1.225 ) -> np.array:
     """
     Compute the circulation at every control point based on Kutta-Joukowsky
 
-    :lift:      Lift per unit span for every section of the blade
-    :u_infty:   Local velocity magnitude 
-    :rho:       Fluid density 
+    :lift:              Lift per unit span for every section of the blade
+    :old_circulation:   Old circulation 
+    :u_infty:           Local velocity magnitude 
+    :rho:               Fluid density 
     """
 
-    circulation = lift / (rho * u_inflow)
+    circulation = (old_circulation  +  lift / (rho * u_inflow)) / 2
     return circulation
 
 def calc_velocity(u_infty: float, omega: float, 
@@ -197,7 +198,7 @@ def task1(debug=False):
    
     # add relaxation
     # from the lift we can obtain the bound circulation
-    bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"]) # compute with the magnitude -> is that so exact ? 
+    bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"], np.array([0]*len(lift))) # compute with the magnitude -> is that so exact ? 
     # The trailing circulation is the delta between two bound circulations, or the "step"
     #breakpoint()
     trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
@@ -219,7 +220,9 @@ def task1(debug=False):
         effective_aoa = -twist_list_centre + pitch + np.arctan(inflow_velocity["u"]/inflow_velocity["v"]) 
         lift = calc_lift(np.deg2rad(effective_aoa), chord_list_centre, inflow_velocity["magnitude"])
         # from the lift we can obtain the bound circulation
-        bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"]) # compute with the magnitude -> is that so exact ? 
+        bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"],bound_circulation) # compute with the magnitude -> is that so exact ? 
+        #bound_circulation = (bound_circulation )/2
+
         trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
         #trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
         
