@@ -494,19 +494,19 @@ class VortexSystem:
         :param induction_point:
         :return:
         """
-        r_s = vortex_start-induction_point # vector from induction point to the start of the vortex
-        r_e = vortex_end-induction_point # vector from the induction point to the end of the vortex
-        r_v = vortex_start-vortex_end # vector representing the vortex
+        r_s = induction_point-vortex_start # vector from induction point to the start of the vortex
+        r_e = induction_point-vortex_end # vector from the induction point to the end of the vortex
+        r_v = vortex_end-vortex_start # vector representing the vortex
 
         l_s = np.linalg.norm(r_s) # distance between the induction point and the start of the vortex
         l_e = np.linalg.norm(r_e) # distance between the induction point and the end of the vortex
         l_v = np.linalg.norm(r_v) # length of the vortex
 
-        h = np.linalg.norm(np.cross(r_v, r_s))/l_v # shortest distance between the control point and an infinite
-        # extension of the vortex filament
+        h = np.linalg.norm(np.cross(r_v, r_s))/l_v # shortest (normal) distance between the control point and an
+        # infinite extension of the vortex filament
         if h <= 1e-10: # the control point lies too close normal to the vortex line
             # todo handle control points that lie very close to the vortex core
-            return np.zeros(3)
+            return np.zeros(3) # for now assume no induction
         e_i = np.cross(r_v, r_s)/(h*l_v) # unit vector of the direction of induced velocity
         return  e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e)))
 
