@@ -168,9 +168,10 @@ def task1(debug=False):
     #------------------------------------------------------#
     # 3.1 Set Control points
     print("Create vortex system")
-    vortex_system.set_control_points(x_control_points=np.multiply(1/4*chord_list_centre,  np.cos(twist_list_centre + pitch)),
-                                     y_control_points=np.multiply(1/4*chord_list_centre,  np.sin(twist_list_centre + pitch)),
+    vortex_system.set_control_points(x_control_points=np.multiply(1/4*chord_list_centre,  np.sin(twist_list_centre + pitch)),
+                                     y_control_points=np.multiply(1/4*chord_list_centre,  np.cos(twist_list_centre + pitch)),
                                      z_control_points=radii_centre_list)
+
 
     # 3.2 Create the matrices connecting the circulation and the velocity field
 
