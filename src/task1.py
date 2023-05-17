@@ -8,7 +8,7 @@ import scipy
 from bem_pckg.helper_functions import Helper
 from bem_pckg import BEM
 from bem_pckg import twist_chord
-from geometry import VortexSystem
+from vortex_system import VortexSystem
 import task1
 helper  = Helper()
 
@@ -99,7 +99,7 @@ def task1():
     vortex_system.set_blade(0.2 + np.linspace(0, 1, 5), np.linspace(0, 0.2, 5)[::-1], blade_rotation=-0.5 * np.pi / 2,
                    rotor_rotation_speed=omega)
     #wake.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=50)
-    vortex_system.set_wake_properties(wake_speed=wake_speed, wake_length=5, time_resolution=50)
+    vortex_system.set_wake(wake_speed=wake_speed, wake_length=5, resolution=50)
     vortex_system.rotor()
     vortex_system.blade_elementwise_visualisation()
 
