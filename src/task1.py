@@ -40,13 +40,13 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     rotor_area = np.pi * (rotor_radius**2 - root_radius**2)
     C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area) # obtain corresponding thrust coefficient
     # And finally we obtain the induction from solving the CT - induction equation for the induction
-    res = lambda a : 4*a *(1 -a) - C_T # 
-    #induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
-    induction = scipy.optimize.newton(res,0.2)
-    return induction
+    # res = lambda a : 4*a *(1 -a) - C_T #
+    # #induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
+    # induction = scipy.optimize.newton(res,0.2)
+    return 1/2*(1-np.sqrt(1-C_T)) # analytical induction factor solution
 
-def calc_lift(aoa: np.array, chord: np.array, inflow_speed: np.array, rho : float = 1.225,
-              path_to_polar: str="../data/polar.xlsx") -> np.array:
+def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho : float = 1.225,
+              path_to_polar: str="../data/polar.xlsx") -> np.ndarray:
     """ 
     Function to compute the lift force per unit span along the blade.
 
@@ -60,30 +60,31 @@ def calc_lift(aoa: np.array, chord: np.array, inflow_speed: np.array, rho : floa
 
     cl_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cl"]) 
     cl = cl_function(np.rad2deg(aoa))# get cl along the blade
-    lift = 0.5 * rho * inflow_speed**2 * cl  
+    lift = 0.5*rho*chord*inflow_speed**2*cl
     return lift
 
-def calc_circulation(lift: np.array, u_inflow: float, old_circulation: np.array, rho:float=1.225 ) -> np.array:
+def calc_circulation(lift: np.ndarray,
+                     u_inflow: float or np.ndarray,
+                     old_circulation: np.ndarray,
+                     rho:float=1.225 ) -> np.ndarray:
     """
-    Compute the circulation at every control point based on Kutta-Joukowsky
+    Compute the circulation at every control point based on Kutta-Joukowsky. Uses some under-relaxation.
 
     :lift:              Lift per unit span for every section of the blade
     :old_circulation:   Old circulation 
     :u_infty:           Local velocity magnitude 
     :rho:               Fluid density 
     """
+    return (old_circulation+lift/(rho*u_inflow))/2
 
-    circulation = (old_circulation  +  lift / (rho * u_inflow)) / 2
-    return circulation
-
-def calc_velocity(u_infty: float, omega: float, 
-                  radial_positions: np.array, u_induced :np.array, v_induced: np.array ) -> dict:
+def calc_velocity(u_inf: float, omega: float,
+                  radial_positions: np.ndarray, u_induced: np.ndarray, v_induced: np.ndarray ) -> dict:
     """
     Compute the velocity components as the sum of far field velocity, rotation, and the induced velocity field and return a dict.
     """
     #breakpoint()
-    u = u_infty + u_induced     # x-component
-    v = omega * radial_positions + v_induced   # y - component
+    u = u_inf+u_induced     # x-component
+    v = omega*radial_positions+v_induced   # y - component
     velocity_magnitude = np.sqrt(u**2 + v**2) # absolute
     return {"u": u, "v": v, "magnitude":velocity_magnitude} # return a dict!
 
@@ -105,10 +106,11 @@ def task1(debug=False):
     n_blades = 3                        # number of blades
     inner_radius = 0.2 * radius         # inner end of the blade section
     pitch_deg = -2                      # pitch in degrees
-    pitch = np.radians(pitch_deg)       # pitch angle in radian
-    resolution = 5                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
-    residual_max = 10**-5
-    n_iter_max = 100
+    pitch = np.deg2rad(pitch_deg)       # pitch angle in radian
+    resolution = 10                      # -----------> !!!NEEDS TO BE ADAPTED!!!!
+    residual_max = 1e-5
+    n_iter_max = 400
+    vortex_core_radius = 0.5
     
     ### Operational data 
     v_0 = 10                            # [m] Wind speed
@@ -121,22 +123,33 @@ def task1(debug=False):
     ##!!!!!!! Needs to be adapted!
     # Get the positions along the span for each element and the nodes
     # Compute discretization of the blade:
-    # uniform distribution (for now)
-    radii = np.linspace(inner_radius, radius, resolution) # radial positions of the ends of each section
-    radii_centre_list = np.array([0.5*(radii[i] + radii[i+1]) for i in range(len(radii)-1)] )  # centre of sections
-    twist_list_centre = np.array([twist_chord.get_twist(r_centre, radius) for r_centre in radii_centre_list])  # Get the twist in radian at the centers
-    chord_list_centre = np.array([twist_chord.get_chord(r_centre, radius) for r_centre in radii_centre_list] ) # Get the chord at the centers
-     
-    # changed to taking at the edges of an element.... if that really makes sense needs to be discussed
-    twist_list = np.array( [twist_chord.get_twist(r, radius) for r in radii])  # Get the twist at boundary locations
-    chord_list = np.array([twist_chord.get_chord(r, radius) for r in radii])  # Get the chord
-    # So now we have defined the rotor fully. 
+    # uniform distribution or cosine distribution
+    # radii_ends = np.linspace(inner_radius, radius, resolution) # radial positions of the ends of each section (uniform)
+    radii_ends = (np.sin(np.linspace(-np.pi/2, np.pi/2, resolution))/2+0.5)*(radius-inner_radius)+inner_radius # sine
+    # distribution
+
+    # M: changed chord and twist to the edges of an element.... if that really makes sense needs to be discussed
+    # J: It absolutely does, the confusion probably roots in some misunderstanding. In contrast to BEM, the definition
+    # of the blade for our lifting line is first and foremost solely to define the geometry of the vortex system for
+    # which we cannot use anything but the ends of the blade elements (because there the trailing vortices start).
+
+    chord_ends = twist_chord.get_chord(radii_ends, radius) # chord at the ends of each section
+    twist_ends = -twist_chord.get_twist(radii_ends, radius)
+    pitch = -pitch
+    # check /documentation/VortexSystem.pdf for the angles to understand the signs. In short: the conventional twist
+    # and pitch definitions face the opposite direction of the angle of the vortex_system coordinate system that is
+    # responsible for these rotations (angle: blade_rotation). Thus, the "-" "transforms" the conventional blade
+    # coordinate system to the coordinate system of vortex_system.
+
+
+    # Now we have the geometry of the blade. This knowledge is inserted into a vortex_system object in PART 2.
+
     # We now want to run BEM to obtain a CT value which we can use to compute the wake convection
-   
     #breakpoint()
     
     # With the induction the 
     induction = calc_induction_bem(tsr,-2)
+    u_rotor = v_0*(1-induction)
     print("BEM done")
     #------------------------------------------------------#
     # PART 2 - set up wake system
@@ -146,65 +159,81 @@ def task1(debug=False):
     
     # compute inputs for the wake tool:
     omega = tsr*v_0/radius
-    wake_speed = (1-induction)*v_0  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
-    wake_length = 1 * 2 * radius # how many diameters should the wake have?
-    time_resolution = 300
+    wake_speed = u_rotor  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
+    wake_length = 1 * 2*radius # how many diameters should the wake have?
+    resolution = 50
 
-    
     # initializy wake geometry
     vortex_system = VortexSystem()
-    vortex_system.set_blade(radii, chord_list, blade_rotation=twist_list + pitch, 
-                            rotor_rotation_speed=omega) # The twist list at the boundaries should be required only for the computation of the wake -> which way the 
-    #wake.set_wake_properties(wake_speed=0.5, wake_length=5, time_resolution=50)
-    # set the properties of the wake. note that the resolution here should be something related to the discretization of the trailing vortices rather than the discretization of the blade
-    vortex_system.set_wake(wake_speed=wake_speed, wake_length=wake_length, resolution=time_resolution)
+    vortex_system.set_blade(radii_ends, chord_ends, blade_rotation=twist_ends+pitch, rotor_rotation_speed=omega,
+                            n_blades=n_blades)
 
-    vortex_system.rotor() # create the vortex system
-    if debug:
-        vortex_system.blade_elementwise_visualisation()
+    # set the properties of the wake.
+    # M: note that the resolution here should be something related to the discretisation of the trailing vortices
+    # rather than the discretisation of the blade
+    # J: The resolution is purely related to the length of the trailing vortices and stands in no relation to the
+    # discretisation of the blade, that is the resolution is the number of points+1 per trailing vortex.
+    vortex_system.set_wake(wake_speed=wake_speed, wake_length=wake_length, resolution=resolution)
 
+    vortex_system.rotor() # create the vortex system, that is bound and trailing vortices of the whole rotor
     #------------------------------------------------------#
     # PART 3 - Compute matrices
     #------------------------------------------------------#
     # 3.1 Set Control points
     print("Create vortex system")
-    vortex_system.set_control_points(x_control_points=np.multiply(1/4*chord_list_centre,  np.sin(twist_list_centre + pitch)),
-                                     y_control_points=np.multiply(1/4*chord_list_centre,  np.cos(twist_list_centre + pitch)),
-                                     z_control_points=radii_centre_list)
-
+    # The control points have to lie on the quarter chord. We assume them to be radially in the middle of each blade
+    # element
+    vortex_system.set_control_points_on_quarter_chord()
 
     # 3.2 Create the matrices connecting the circulation and the velocity field
-
     print("Create induction matrices")
-    trailing_mat_u, trailing_mat_v, trailing_mat_w = vortex_system.trailing_induction_matrices() # calculate the trailing induction matrices
-    bound_mat_u, bound_mat_v, bound_mat_w = vortex_system.bound_induction_matrices() # calculate the bound induction matrices
-    
+    # calculate the trailing induction matrices
+    trailing_mat_u, trailing_mat_v, trailing_mat_w = vortex_system.trailing_induction_matrices(vortex_core_radius=vortex_core_radius)
+    bound_mat_u, bound_mat_v, bound_mat_w = vortex_system.bound_induction_matrices(vortex_core_radius=vortex_core_radius) # calculate the bound induction matrices
+    if debug:
+        vortex_system.blade_elementwise_visualisation(control_points=True)
+        # vortex_system.rotor_visualisation(control_points=True)
     #------------------------------------------------------#
     # PART 4 - Iterate to find the right circulation
     #------------------------------------------------------#
     
     print("Initialize values")
     # 4.1 Initialize the arrays for the velocity
-    u_induced = np.zeros(len(radii_centre_list))
-    v_induced = np.zeros(len(radii_centre_list))
-    inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
-    # We can compute the effective angle of attack with it
-    # -> This needs to be changed -> shouldnt use induced velocity for that
-   # effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here, as were not yet inducing velocities
-    #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities
-    #effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
-    effective_aoa = - twist_list_centre + (np.arctan(inflow_velocity["u"]/inflow_velocity["v"])) # second part should be 0 here, as were not yet inducing velocities -----> in radian
-    #breakpoint()
-    lift = calc_lift(effective_aoa, chord_list_centre, inflow_velocity["magnitude"])
-   
-    # add relaxation
-    # from the lift we can obtain the bound circulation
-    bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"], np.array([0]*len(lift))) # compute with the magnitude -> is that so exact ? 
-    # The trailing circulation is the delta between two bound circulations, or the "step"
-    #breakpoint()
-    trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
-    #trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
+    radii_centre = (radii_ends[:-1]+radii_ends[1:])/2 # radial position of the centre of each blade element
+    twist_centre = -twist_chord.get_twist(radii_centre, radius) # twist at the centre of each element
+    chord_centre = twist_chord.get_chord(radii_centre, radius) # chord at the centre of each element
 
+    u_induced = np.zeros(radii_centre.shape)
+    v_induced = np.zeros(radii_centre.shape)
+    inflow_velocity = calc_velocity(v_0, omega, radii_centre, u_induced, v_induced) # we now have the u,v velocity
+    # vector
+    # We can compute the effective angle of attack with it
+    # M: -> This needs to be changed -> shouldnt use induced velocity for that
+    # J: can we delete some of these lines for clarity?
+    # effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-v_induced/u_induced)) # second part should be 0 here,
+    # as were not yet inducing velocities
+    #effective_aoa = twist_list_centre + np.rad2deg(np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second
+    # part should be 0 here, as were not yet inducing velocities
+    #effective_aoa = twist_list_centre + (np.arctan(-inflow_velocity["v"]/inflow_velocity["u"])) # second part
+    # should be 0 here, as were not yet inducing velocities -----> in radian
+
+    # again, check /documentation/VortexSystem.pdf for the angles to understand the signs and tan use.
+    effective_aoa = np.arctan(inflow_velocity["u"]/inflow_velocity["v"])+(pitch+twist_centre) # in rad,
+    # the + is because the pitch and twist are defined in the vortex_system coordinate system.
+
+    #breakpoint()
+    lift = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
+
+    # from the lift we can obtain the bound circulation
+    bound_circulation = calc_circulation(lift,
+                                         inflow_velocity["magnitude"],
+                                         lift/(air_density*inflow_velocity["magnitude"])) # M: compute with the
+    # magnitude -> is that so exact ?
+    # J: Yes that's perfect.
+
+    # The trailing circulation is the difference between two bound circulations, or the "step"
+    #breakpoint()
+    trailing_circulation = np.append(0, bound_circulation)-np.append(bound_circulation, 0)
     # Everything is defined, now create a loop to iterate over the circulations
     residual = 1
     n_iter = 0
@@ -213,31 +242,35 @@ def task1(debug=False):
         L_mag = L_mag_new # magnitude of the lift
         u_induced = trailing_mat_u @ trailing_circulation + bound_mat_u @ bound_circulation # calculate stream-wise induction
         v_induced = trailing_mat_v @ trailing_circulation + bound_mat_v @ bound_circulation # calc azimuthal velocity / downwash
-        inflow_velocity = calc_velocity(v_0, omega, radii_centre_list, u_induced, v_induced) # we now have the u,v velocity vector
-        U = inflow_velocity["u"] 
-        V = inflow_velocity["v"] 
-        #breakpoint()
-        #effective_aoa = twist_list_centre + np.arctan(-inflow_velocity["v"]/inflow_velocity["u"]) 
-        effective_aoa = -twist_list_centre + pitch + np.arctan(inflow_velocity["u"]/inflow_velocity["v"]) 
-        lift = calc_lift(np.deg2rad(effective_aoa), chord_list_centre, inflow_velocity["magnitude"])
-        # from the lift we can obtain the bound circulation
-        bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"],bound_circulation) # compute with the magnitude -> is that so exact ? 
-        #bound_circulation = (bound_circulation )/2
 
-        trailing_circulation = np.append(0,bound_circulation) - np.append (bound_circulation, 0)  
+        inflow_velocity = calc_velocity(v_0, omega, radii_centre, u_induced, v_induced) # we now have the u,v velocity
+        # vector
+        #breakpoint()
+        effective_aoa = np.arctan(inflow_velocity["u"]/inflow_velocity["v"])+(pitch+twist_centre)
+
+        lift = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
+
+        # from the lift we can obtain the bound circulation
+        bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"], bound_circulation)
+
+        trailing_circulation = np.append(0, bound_circulation)-np.append(bound_circulation, 0)
         #trailing_circulation = np.reshape(trailing_circulation, (radii.size,1))
         
         L_mag_new = np.sum(lift)
-        residual = np.abs(L_mag - L_mag_new) 
+        residual = np.abs(L_mag-L_mag_new)
         # update circulation
-        print(f"Iter: {n_iter} \t residual: {residual}")
+        if n_iter%20==0:
+            print(f"Iter: {n_iter} \t residual: {residual}")
         n_iter +=1
     fig, axs = plt.subplots(5,1)
-    axs[0].plot(radii_centre_list, bound_circulation)
-    axs[1].plot(trailing_circulation)
-    axs[2].plot(radii_centre_list, lift)
-    axs[3].plot(radii_centre_list, u_induced)
-    axs[4].plot(radii_centre_list, v_induced)
+    axs[0].plot(radii_centre, bound_circulation)
+    axs[1].plot(radii_ends, trailing_circulation)
+    axs[2].plot(radii_centre, lift)
+    axs[3].plot(radii_centre, u_induced)
+    axs[4].plot(radii_centre, v_induced)
+    helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3, font_size=12,
+                       y_label=["bound\ncirculation", "trailing\ncirculation", "lift", "u induced", "v induced"])
+    helper.handle_figure(fig, show=True, size=(6,12))
     plt.show()
 
 if __name__=="__main__":
