@@ -101,6 +101,20 @@ class VortexSystem:
         self.wake_set = True
         return None
 
+    def set_control_points_on_quarter_chord(self) -> None:
+        """
+        Automatically sets the control points on the quarter chord and the radial middle of the blade elements.
+        :return:
+        """
+        qc_elements = self.c_elements/4 # quarter chord of blade element ends
+        x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord of blade element ends
+        y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord of blade element ends
+        coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, self.r_elements)])
+        # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends.
+        self.control_points = (coordinates_ends[:-1]+coordinates_ends[1:])/2
+        self.n_control_points = self.control_points.shape[0]
+        return None
+
     def set_control_points(self,
                            x_control_points: float or np.ndarray,
                            y_control_points: float or np.ndarray,
@@ -116,7 +130,6 @@ class VortexSystem:
         :param z_control_points: -"- z coordinates
         :return: None
         """
-        # 1. Check dimesions  
         # check how many coordinates are given per axis
         n_x = 1 if type(x_control_points) == float or type(x_control_points) == int else x_control_points.size
         n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
@@ -126,7 +139,6 @@ class VortexSystem:
             raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
                              f"n_z] = {lengths}")
 
-        # 2. Actual assignment of the values
         self.n_control_points = np.max([n_x, n_y, n_z]) # get number of control points
         x_cp, y_cp, z_cp = self._float_to_ndarray(self.n_control_points, x_control_points, y_control_points,
                                                   z_control_points)
@@ -200,7 +212,7 @@ class VortexSystem:
         self.rotor_bound()
         return None
 
-    def bound_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def bound_induction_matrices(self, vortex_core_radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from bound vortices of the rotor on all control points.
         :return: tuple with the induction matrices
@@ -217,7 +229,7 @@ class VortexSystem:
         for bound_system_i, bound in enumerate(self.coordinates_rotor_bound):
             for cp_i, control_point in enumerate(self.control_points):
                 for vortex_i, (vortex_start, vortex_end) in enumerate(zip(bound[:-1], bound[1:])):
-                    induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point)
+                    induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
                     single_trailing_induction_matrices["x"][bound_system_i][cp_i, vortex_i] = induction_factors[0]
                     single_trailing_induction_matrices["y"][bound_system_i][cp_i, vortex_i] = induction_factors[1]
                     single_trailing_induction_matrices["z"][bound_system_i][cp_i, vortex_i] = induction_factors[2]
@@ -232,7 +244,7 @@ class VortexSystem:
                 induction_matrices[direction] += induction_mat  # sum the contributions of all blade wakes
         return induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]
 
-    def trailing_induction_matrices(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def trailing_induction_matrices(self, vortex_core_radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from the wake of the rotor on all control points.
         :return: tuple with the induction matrices for u, v and w
@@ -259,7 +271,7 @@ class VortexSystem:
                     vortex_ends = wake[1+inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)]
                     induction_factors = np.zeros(3)
                     for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
-                        induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point)
+                        induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
                     # place the induction factors (x, y, and z component) of this wake in its respective wake
                     # induction matrix
                     single_trailing_induction_matrices["x"][wake_system_i][cp_i, inducing_element] = induction_factors[0]
@@ -509,19 +521,21 @@ class VortexSystem:
     @staticmethod
     def _vortex_induction_factor(vortex_start: np.ndarray,
                                  vortex_end: np.ndarray,
-                                 induction_point: np.ndarray) -> np.ndarray:
+                                 induction_point: np.ndarray,
+                                 core_radius: float) -> np.ndarray:
         """
         This function calculates the induction at a point 'induction_point' from a straight vortex line between the
         two points 'vortex_start' and 'vortex_end' for a unity circulation. The returned value is a vector of induced
         velocities.
-        :param vortex_start:
-        :param vortex_end:
-        :param induction_point:
-        :return:
+        :param vortex_start: numpy array of size (3,)
+        :param vortex_end: numpy array of size (3,)
+        :param induction_point: numpy array of size (3,)
+        :param core_radius: radius of the solid body inside the vortex
+        :return: numpy array os size (3,)
         """
-        r_s = vortex_start-induction_point # vector from induction point to the start of the vortex
-        r_e = vortex_end-induction_point # vector from the induction point to the end of the vortex
-        r_v = vortex_start-vortex_end # vector representing the vortex
+        r_s = induction_point-vortex_start # vector from the start of the vortex to the induction point
+        r_e = induction_point-vortex_end # vector from the end of the vortex to the induction point
+        r_v = vortex_end-vortex_start # vector from the start of the vortex to the end of the vortex
 
         l_s = np.linalg.norm(r_s) # distance between the induction point and the start of the vortex
         l_e = np.linalg.norm(r_e) # distance between the induction point and the end of the vortex
@@ -529,20 +543,19 @@ class VortexSystem:
 
         h = np.linalg.norm(np.cross(r_v, r_s))/l_v # shortest distance between the control point and an infinite
         # extension of the vortex filament
-        if h <= 1e-10: # the control point lies too close normal to the vortex line
-            # todo handle control points that lie very close to the vortex core
+        if h == 0: # the control point lies in the centre of the vortex
             return np.zeros(3)
+
         e_i = np.cross(r_v, r_s)/(h*l_v) # unit vector of the direction of induced velocity
-        return  e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e)))
+        if h <= core_radius: # the control point lies inside the vortex core
+            return h/(2*np.pi*core_radius**2)*e_i # induced velocity of solid body rotation
+        else:
+            return e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e))) # induced velocity of irrotational vortex
 
     @staticmethod
     def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
         """
-        Loops through the input arguments to ensure they are numpy arrays. If a float is given, it is turned into an array of length with a uniform value of the float.
-
-        There is a bug !
-        The type checking is not a valid way to figure out the size. So if the input is a list instead of a numpy array, this behaviour breaks
+        Loops through the input arguments to ensure they are numpy arrays. If a float is given, it is turned into an
+        array of length 'length' with all values being the initial float.
         """
-        # return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in
-        return [np.array(arg) if len(arg) != 1  else np.asarray([arg for _ in range(length)]) for arg in
-                args]
+        return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in args]
