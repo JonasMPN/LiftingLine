@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 class VortexSystem:
     def __init__(self):
         """
-        Initialize empty object
+        Initialise VortexSystem object.
         """
         # blade properties
         self.r_elements = None
@@ -95,7 +95,7 @@ class VortexSystem:
 
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
-        Sets the three parameters of 'set_wake' for this instance.
+        Sets the three parameters of the wake of this instance.
         :param wake_speed: the speed at which the wake is convected in m/s
         :param wake_length: the downwind length of the wake in m
         :param resolution: the number of points used to discretise one trailing vortex
@@ -111,14 +111,19 @@ class VortexSystem:
     def set_control_points_on_quarter_chord(self) -> None:
         """
         Automatically sets the control points on the bound vortex in the radial middle of a blade element.
-        ATTENTION: This is NOT the same as the quarter chord of the radial middle of the blade element.
+        ATTENTION: This is generally NOT the same as the quarter chord of the radial middle of the blade element. It
+        is only the same if the blade rotation is constant along the blade. Otherwise, the linear connection of the
+        bound vortices between the blade element ends causes the middle of the bound vortices to NOT lie on the
+        actual quarter chord point of the middle of the blade element. This is because the actual quarter chord point
+        follows the proper angles while the bound vortex connection is a straight line.
         :return:
         """
         qc_elements = self.c_elements/4 # quarter chord of blade element ends
         x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord of blade element ends
         y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord of blade element ends
         coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, self.r_elements)])
-        # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends.
+        # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends,
+        # i.e. on the bound vortex in the radial middle of the element.
         self.control_points = (coordinates_ends[:-1]+coordinates_ends[1:])/2
         self.n_control_points = self.control_points.shape[0]
         return None
@@ -128,12 +133,12 @@ class VortexSystem:
                            y_control_points: float or np.ndarray,
                            z_control_points: float or np.ndarray) -> None:
         """
-        Sets the control point coordinates for the blade 
+        Sets the control point coordinates for the blade.
 
         The control points are specified by their individual coordinates. If an array of coordinates is given then
-        that array must be a single row or single column array. The control points are internally saved as a list of
-        (1,3) sized np.ndarrays.
-        :param x_control_points: list/array of x coordinates 
+        that array must be a single row array. The control points are internally saved as a list of
+        (1, 3) sized np.ndarrays.
+        :param x_control_points: float or np.ndarray of x coordinates
         :param y_control_points: -"- y coordinates
         :param z_control_points: -"- z coordinates
         :return: None
@@ -223,9 +228,9 @@ class VortexSystem:
     def bound_induction_matrices(self, vortex_core_radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from bound vortices of the rotor on all control points.
-        :return: tuple with the induction matrices
+        :return: tuple with the induction matrices which are numpy arrays
         """
-        self._assert_bound("rotor")
+        self._assert_bound("rotor") # assert that the vortex points of the rotor vortex system are calculated
 
         n_circulations = len(self.r_elements)-1
         single_trailing_induction_matrices = {  # the inductions are calculated for individual bound vortex systems
@@ -301,16 +306,18 @@ class VortexSystem:
                                         bound: bool=True,
                                         control_points: bool=False) -> None:
         """
-        Visualises the wake of one blade. Colours the trailing vortex of each blade element separately.
-        Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
-        control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
+        Visualises the wake of one blade. Colours the trailing vortex of each blade element separately. If control
+        points have been set already, those can be visualised as well.
+        :param trailing: Visualise the trailing vortices
+        :param bound: Visualise the bound vortices
+        :param control_points: Visualise the control points
         :return: None
         """
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         if trailing:
             self._assert_trailing("blade")
-            for r in self.r_elements:  # or choose individual elements
+            for r in self.r_elements:
                 ax.plot(self.coordinates_blade_trailing_elementwise["x"][r],
                         self.coordinates_blade_trailing_elementwise["y"][r],
                         self.coordinates_blade_trailing_elementwise["z"][r])
@@ -334,7 +341,6 @@ class VortexSystem:
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         ax.set_zlabel("z")
-        # ax.view_init(90, 90, -90)
         plt.show()
         return None
 
@@ -347,7 +353,11 @@ class VortexSystem:
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
         Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
         control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
-        :return: None
+        :param trailing: Visualise the trailing vortices
+        :param bound: Visualise the bound vortices
+        :param control_points: Visualise the control points
+        :param show: whether to show the plot. If False, the pyplot figure and axis are returned.
+        :return:
         """
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
@@ -496,22 +506,17 @@ class VortexSystem:
                          if_not_do,
                          rotate_to: str) -> None:
         """
-        Creates a specific (bound or trailing) vortex system for the specified rotor. 
+        Creates a specific (bound or trailing) vortex system for the specified rotor.
+        It does that by taking the specific vortex system from a single blade and rotating it 'n_blades'-1 times. The
+        resulting vortex system is saved as a list with the vortex system of each blade as a unique entry. Each entry is
+        a numpy array of size (N,3). Each row corresponds to one vortex line and the columns correspond to the three
+        axes.
 
-        It does that by taking the
-        specific vortex system from a single blade and rotating it n_blades-1 times. The resulting vortex system is
-        saved as a list with the vortex system (size (N,3)) of each blade as a unique entry.
-
-        So
-        - the list has so many entries as there are blades
-        - every entry represents one vortex line for a single blade
-        - columns: X, Y, Z
-        - rows: points along the span
         :param called_from:         Which function calls _rotate_combined(). This is for user error clarification.
         :param coordinates_from:    The coordinates of the vortex system that is to be rotated
         :param if_not_do:           Function that calculates the combined coordinates of the vortex system if they are
                                     not yet calculated
-        :param save_to:             Class property name as string (without self.) to which the combined coordinates are
+        :param rotate_to:           Class property name as string (without self.) to which the combined coordinates are
                                     saved.
         :return:
         """
