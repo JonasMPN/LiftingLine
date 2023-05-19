@@ -50,11 +50,12 @@ class VortexSystem:
                   n_blades: int = 3
                   ) -> None:
         """
-        Set the blade geometry parameters (blade discretization, chord per element, twist/pitch, number of blades), and the rotation speed 
-
         The rotor coordinate system is such that the x faces downwind along the rotor axis, y faces to the left
         facing the rotor from the front (i.e. looking downwind) and z point upwards. z goes along the leading edge of a
-        blade that is point upward. All angles follow a standard right-hand rule.
+        blade that is point upward. All angles follow a standard right-hand rule. See /documentation/VortexSystem.pdf
+        for details.
+        In the following definitions, 'section' means the blade profile at a certain location. A blade element is
+        defined by two blade sections, i.e., one blade element is bound by two blade sections (beginning and end).
 
         :param r_elements:              blade section radial position
         :param c_elements:              blade section chord length 
@@ -65,9 +66,10 @@ class VortexSystem:
         :return:                        None
         """
         self.r_elements = r_elements
-        # checks if a list of chord and blade rotations is given. if not, create a list with the uniform value using the _float_to_ndarray function
+        # checks if a list of chord and blade rotations is given. If not, create a np.ndarray with the uniform value
+        # of the float using the _float_to_ndarray function
         self.c_elements, self.blade_rotation = self._float_to_ndarray(len(r_elements), c_elements, blade_rotation)
-        # Ensure that the provided arrays have the same length as the elment array, raise error otherwise
+        # Ensure that r_elements, c_elements, and blade_rotation expect the same number of sections
         if self.r_elements.shape != self.c_elements.shape or self.r_elements.shape  != self.blade_rotation.shape:
             raise ValueError("'r_elements', 'c_elements', and 'blade_rotation' do not have the same length. This only "
                              "happens if 'c_elements' or 'blade_rotation' are specified as a list. The shapes are:"
@@ -75,6 +77,7 @@ class VortexSystem:
                              f" {self.blade_rotation.size}")
         self.rotor_rotation_speed = rotor_rotation_speed
         self.n_blades = n_blades
+
         # if a new rotor is defined, the old vortex system is no longer correct and is therefore deleted
         # bound vortex system
         self.coordinates_blade_bound_elementwise = None
@@ -84,26 +87,31 @@ class VortexSystem:
         self.coordinates_blade_trailing_elementwise = None
         self.coordinates_blade_trailing = None
         self.coordinates_rotor_trailing = None
-        # error clarification for user
+
+        # 'rotor_set' is internally used to provide meaningful error messages if the user wants to perform
+        # calculations that require the rotor properties to be set.
         self.rotor_set = True
         return None
 
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
-        Calls a function to define the wake and change the wake status.
-        
-        What is the dimensions here? is the wake length in diameter or in length units?
-        What resolution is this? Along the blade span or along a trailing vortex?
+        Sets the three parameters of 'set_wake' for this instance.
+        :param wake_speed: the speed at which the wake is convected in m/s
+        :param wake_length: the downwind length of the wake in m
+        :param resolution: the number of points used to discretise one trailing vortex
+        :return:
         """
         self._set(**{param: value for param, value in locals().items() if param != "self"})
-        # Set a property of the object to indicate, whether the wake is already defined 
-        # error clarification for user
+
+        # 'wake_set' is internally used to provide meaningful error messages if the user wants to perform
+        # calculations that require the rotor properties to be set.
         self.wake_set = True
         return None
 
     def set_control_points_on_quarter_chord(self) -> None:
         """
-        Automatically sets the control points on the quarter chord and the radial middle of the blade elements.
+        Automatically sets the control points on the bound vortex in the radial middle of a blade element.
+        ATTENTION: This is NOT the same as the quarter chord of the radial middle of the blade element.
         :return:
         """
         qc_elements = self.c_elements/4 # quarter chord of blade element ends
@@ -429,7 +437,7 @@ class VortexSystem:
         :return:
         """
         existing_parameters = [*self.__dict__]
-        for parameter, value in kwargs.items(): # puts the touples of parameters and values
+        for parameter, value in kwargs.items(): # puts the tuples of parameters and values
             if parameter not in existing_parameters:
                 raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
             self.__dict__[parameter] = value
@@ -469,7 +477,8 @@ class VortexSystem:
         :param if_not_do:           Function that calculates these elementwise coordinates if they are not yet
                                     calculated
         :param save_to:             Class property name as string (without self.) to which the combined coordinates are
-                                    saved.  :return: None
+                                    saved.
+        :return: None
         """
         self._assert_properties(called_from) # assert that the rotor and wake properties have been set
         if coordinates_from is None: # if the element-wise coordinates do not yet exist
