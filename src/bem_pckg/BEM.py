@@ -3,7 +3,7 @@ from scipy.optimize import brentq, newton, minimize
 import pandas as pd
 import scipy.interpolate as interpolate
 from helper_functions import Helper
-from data_handling import *
+from bem_pckg.data_handling import *
 import scipy
 import matplotlib.pyplot as plt
 helper=Helper()

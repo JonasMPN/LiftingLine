@@ -3,17 +3,19 @@ import numpy as np
 def vortex_induction_factors_Carlos(vortex_start: np.ndarray,
                                     vortex_end: np.ndarray,
                                     induction_point: np.ndarray) -> np.ndarray:
-    vec_R_1 = induction_point - vortex_start
-    vec_R_2 = induction_point - vortex_end
-    R_1 = np.linalg.norm(vec_R_1)
-    R_2 = np.linalg.norm(vec_R_2)
-    R_1_2 = np.cross(vec_R_1, vec_R_2)
-    R_1_2_sqr = np.dot(R_1_2, R_1_2)
-    vec_vortex = vortex_end - vortex_start
-    R_0_1 = np.dot(vec_vortex, vec_R_1)
-    R_0_2 = np.dot(vec_vortex, vec_R_2)
-    K = 1/(4*np.pi*R_1_2_sqr)*(R_0_1/R_1-R_0_2/R_2)
-    return K*R_1_2
+    X1, Y1, Z1 = vortex_start[0], vortex_start[1], vortex_start[2]
+    X2, Y2, Z2 = vortex_end[0], vortex_end[1], vortex_end[2]
+    XP, YP, ZP = induction_point[0], induction_point[1], induction_point[2]
+    R1 = np.sqrt((XP-X1)**2+(YP-Y1)**2+(ZP-Z1)**2)
+    R2 = np.sqrt((XP-X2)**2+(YP-Y2)**2+(ZP-Z2)**2)
+    R12_X = (YP-Y1)*(ZP-Z2)-(ZP-Z1)*(YP-Y2)
+    R12_Y = -(XP-X1)*(ZP-Z2)+(ZP-Z1)*(XP-X2)
+    R12_Z = (XP-X1)*(YP-Y2)-(YP-Y1)*(XP-X2)
+    R12_sqr = R12_X**2+R12_Y**2+R12_Z**2
+    R0R1 = (X2-X1)*(XP-X1)+(Y2-Y1)*(YP-Y1)+(Z2-Z1)*(ZP-Z1)
+    R0R2 = (X2-X1)*(XP-X2)+(Y2-Y1)*(YP-Y2)+(Z2-Z1)*(ZP-Z2)
+    K = 1/(4*np.pi*R12_sqr)*(R0R1/R1-R0R2/R2)
+    return np.asarray([K*R12_X, K*R12_Y, K*R12_Z])
 
 def vortex_induction_factors_Jonas(vortex_start: np.ndarray,
                                    vortex_end: np.ndarray,
