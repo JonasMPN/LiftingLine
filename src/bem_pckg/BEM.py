@@ -104,7 +104,8 @@ class BEM:
             "c_l": list(),          # lift coefficient at radial position
             "c_d": list(),          # drag coefficient at radial position
             "phi": list(),          # inflow angle
-            "inflow_speed": list()  # inflow speed for airfoil
+            "inflow_speed": list(),  # inflow speed for airfoil
+            "chord": list()
         }
 
         pitch = np.deg2rad(pitch)
@@ -177,6 +178,7 @@ class BEM:
             results["c_d"].append(c_d)
             results["phi"].append(phi)
             results["inflow_speed"].append(inflow_speed)
+            results["chord"].append(chord)
         self.current_results = pd.DataFrame(results)
         self.df_results = pd.concat([self.df_results, pd.DataFrame(identifier|results)])
         self.df_results.to_csv(self.root + "/BEM_results.dat", index=False)

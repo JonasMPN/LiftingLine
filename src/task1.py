@@ -58,9 +58,11 @@ def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho 
     polar_data = pd.read_excel(path_to_polar, skiprows=3) # read in polar data
 
     cl_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cl"]) 
+    cd_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cd"]) 
     cl = cl_function(np.rad2deg(aoa))# get cl along the blade
+    cd = cd_function(np.rad2deg(aoa))# get cl along the blade
     lift = 0.5*rho*chord*inflow_speed**2*cl
-    return lift
+    return lift, cl, cd
 
 def calc_circulation(lift: np.ndarray,
                      u_inflow: float or np.ndarray,
@@ -76,47 +78,34 @@ def calc_circulation(lift: np.ndarray,
     """
     return (old_circulation+lift/(rho*u_inflow))/2
 
+
+def calc_circulation_from_cl(cl: np.array,
+                             c: np.array,
+                             a: np.array,
+                             u_inf: float):
+    """
+    
+    """
+    breakpoint()
+    gamma = cl * 0.5 * c * (1-a) * u_inf
+    return gamma
+
+
 def calc_velocity(u_inf: float, omega: float,
                   radial_positions: np.ndarray, u_induced: np.ndarray, v_induced: np.ndarray ) -> dict:
     """
     Compute the velocity components as the sum of far field velocity, rotation, and the induced velocity field and return a dict.
     """
-    #breakpoint()
     u = u_inf+u_induced     # x-component
     v = omega*radial_positions+v_induced   # y - component
     velocity_magnitude = np.sqrt(u**2 + v**2) # absolute
     return {"u": u, "v": v, "magnitude":velocity_magnitude} # return a dict!
 
-def task1(debug=False):
-    """
-    Function to combine all operations in Task 1 
 
-    That is:
-    - computing the induction via bem
-    - set up the wake accordingly
-    - create the matrix system for the geometrical induction via the vortices
-    - solve for circulation iteratively
-    
-    step 4 needs debugging
-    """
-    
-    #------------ Get all the inputs -------------#
-    radius = 50                         # radius of the rotor
-    n_blades = 3                        # number of blades
-    inner_radius = 0.2 * radius         # inner end of the blade section
-    pitch_deg = -2                      # pitch in degrees
-    pitch = np.deg2rad(pitch_deg)       # pitch angle in radian
-    resolution = 14                     # Spanwise resolution -> seems to break for larger values
-    residual_max = 1e-10
-    n_iter_max = 1000
-    vortex_core_radius = 1
-    
-    #------------ Operational data ---------------#
-    v_0 = 10                            # [m] Wind speed
-    air_density = 1.225
-    tsr = 8                      # Tip speed ratios  to be calculated
-    airfoil = pd.read_excel("../data/polar.xlsx",skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
-    
+def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
+            pitch, resolution_ll, vortex_core_radius, debug,
+            disctretization="sin",
+            residual_max=1e-10, n_iter_max=1000):
     
     #--------------Get twist and chord distributions ----------------#
     
@@ -124,8 +113,12 @@ def task1(debug=False):
     # Get the positions along the span for each element and the nodes
     # Compute discretization of the blade:
     # uniform distribution or cosine distribution
-    # radii_ends = np.linspace(inner_radius, radius, resolution) # radial positions of the ends of each section (uniform)
-    radii_ends = (np.sin(np.linspace(-np.pi/2, np.pi/2, resolution))/2+0.5)*(radius-inner_radius)+inner_radius # sine
+
+    if disctretization =="uniform":
+        radii_ends = np.linspace(inner_radius, radius, resolution_ll) # radial positions of the ends of each section (uniform)
+        
+    else:
+        radii_ends = (np.sin(np.linspace(-np.pi/2, np.pi/2, resolution_ll))/2+0.5)*(radius-inner_radius)+inner_radius # sine
     # distribution
 
     # M: changed chord and twist to the edges of an element.... if that really makes sense needs to be discussed
@@ -146,7 +139,6 @@ def task1(debug=False):
 
     # -------------- Run BEM ----------------#
     # We now want to run BEM to obtain a CT value which we can use to compute the wake convection
-    # breakpoint()
     
     induction, bem_results = calc_induction_bem(tsr, -2)
     u_rotor = v_0*(1-induction)
@@ -162,7 +154,7 @@ def task1(debug=False):
     omega = tsr*v_0/radius
     wake_speed = u_rotor  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
     wake_length = 1 * 2*radius # how many diameters should the wake have?
-    resolution = 50
+    resolution_wake = 50
 
     # initializy wake geometry
     vortex_system = VortexSystem()
@@ -174,7 +166,7 @@ def task1(debug=False):
     # rather than the discretisation of the blade
     # J: The resolution is purely related to the length of the trailing vortices and stands in no relation to the
     # discretisation of the blade, that is the resolution is the number of points+1 per trailing vortex.
-    vortex_system.set_wake(wake_speed=wake_speed, wake_length=wake_length, resolution=resolution)
+    vortex_system.set_wake(wake_speed=wake_speed, wake_length=wake_length, resolution=resolution_wake)
 
     vortex_system.rotor() # create the vortex system, that is bound and trailing vortices of the whole rotor
     #------------------------------------------------------#
@@ -229,8 +221,7 @@ def task1(debug=False):
     effective_aoa = np.arctan(inflow_velocity["u"]/inflow_velocity["v"])+(pitch+twist_centre) # in rad,
     # the + is because the pitch and twist are defined in the vortex_system coordinate system.
 
-    #breakpoint()
-    lift = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
+    lift, cl_current, cd_current = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
 
     # from the lift we can obtain the bound circulation
     bound_circulation = calc_circulation(lift,
@@ -240,7 +231,6 @@ def task1(debug=False):
     # J: Yes that's perfect.
 
     # The trailing circulation is the difference between two bound circulations, or the "step"
-    #breakpoint()
     trailing_circulation = np.append(0, bound_circulation)-np.append(bound_circulation, 0)
     # Everything is defined, now create a loop to iterate over the circulations
     residual = 1
@@ -253,10 +243,9 @@ def task1(debug=False):
 
         inflow_velocity = calc_velocity(v_0, omega, radii_centre, u_induced, v_induced) # we now have the u,v velocity
         # vector
-        #breakpoint()
         effective_aoa = np.arctan(inflow_velocity["u"]/inflow_velocity["v"])+(pitch+twist_centre)
 
-        lift = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
+        lift, cl_current, cd_current = calc_lift(effective_aoa, chord_centre, inflow_velocity["magnitude"])
 
         # from the lift we can obtain the bound circulation
         bound_circulation = calc_circulation(lift, inflow_velocity["magnitude"], bound_circulation)
@@ -272,29 +261,116 @@ def task1(debug=False):
         n_iter +=1
 
     #----------------- Compute lift coefficient -----#
-    cl = lift / (0.5 * air_density *inflow_velocity["magnitude"]**2 * chord_centre )
-    axial_induction = u_induced / v_0
+    cl = lift / (0.5 * air_density * inflow_velocity["magnitude"] ** 2 * chord_centre)  # lift coefficient
+    axial_induction = - u_induced / v_0 
+    a_prime = v_induced / (omega * radii_centre)  
+
+    ll_results = {"r_centre": radii_centre, "u_induced": u_induced, "lift": lift,
+                  "cl": cl, "cd": cd_current, "a": axial_induction, 
+                  "a_prime": a_prime, "aoa":np.rad2deg(effective_aoa),
+                  "bound_circulation":bound_circulation,
+                  "bem_results": bem_results}
+
+    return ll_results
+
+def task1(debug=False):
+    """
+    Function to combine all operations in Task 1 and returns the data as a dictionary
+
+    That is:
+    - computing the induction via bem
+    - set up the wake accordingly
+    - create the matrix system for the geometrical induction via the vortices
+    - solve for circulation iteratively
+    
+    step 4 needs debugging
+    """
+    
+    #------------ Get all the inputs -------------#
+    radius = 50                         # radius of the rotor
+    n_blades = 3                        # number of blades
+    inner_radius = 0.2 * radius         # inner end of the blade section
+    pitch_deg = -2                      # pitch in degrees
+    pitch = np.deg2rad(pitch_deg)       # pitch angle in radian
+    resolution_ll = 14                     # Spanwise resolution -> seems to break for larger values
+    residual_max = 1e-10
+    n_iter_max = 1000
+    vortex_core_radius = 1
+    
+    #------------ Operational data ---------------#
+    v_0 = 10                            # [m] Wind speed
+    air_density = 1.225
+    tsr = 8                      # Tip speed ratios  to be calculated
+    airfoil = pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
+    
+    
+
+    ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
+                         inner_radius, pitch, resolution_ll, vortex_core_radius,
+                         debug, disctretization="uniform",
+                         residual_max=residual_max, n_iter_max=n_iter_max)
 
     #---------------- Plotting ----------------------#
-    fig, axs = plt.subplots(7, 1)
-    axs[0].plot(radii_centre, bound_circulation, "x")
-    axs[1].plot(radii_ends, trailing_circulation)
-    axs[2].plot(radii_centre, cl)
-    axs[3].plot(radii_centre, u_induced)
-    axs[4].plot(radii_centre, v_induced)
-    axs[5].plot(radii_centre, u_induced/v_0)
-    axs[6].plot(radii_centre, v_induced / (omega * radii_centre))
-    axs[2].plot(bem_results.r_centre, bem_results.c_l)
-    helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
-                       font_size=12, y_label=["bound\ncirculation", "trailing\ncirculation",
-                                "Cl", "u induced", "v induced", "induction", "a'"])
-    helper.handle_figure(fig, show=True, size=(6, 12))
-    
-    plt.figure(2)
-    plt.plot(radii_centre, cl)
-    plt.plot(bem_results.r_centre, bem_results.c_l)
+    if debug:
+        fig, axs = plt.subplots(7, 1)
+        axs[0].plot(radii_centre, bound_circulation, "x")
+        axs[1].plot(radii_ends, trailing_circulation)
+        axs[2].plot(radii_centre, cl)
+        axs[3].plot(radii_centre, u_induced)
+        axs[4].plot(radii_centre, v_induced)
+        axs[5].plot(radii_centre, u_induced/v_0)
+        axs[6].plot(radii_centre, v_induced / (omega * radii_centre))
+        axs[2].plot(bem_results.r_centre, bem_results.c_l)
+        helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
+                           font_size=12, y_label=["bound\ncirculation", "trailing\ncirculation",
+                                    "Cl", "u induced", "v induced", "induction", "a'"])
+        helper.handle_figure(fig, show=True, size=(6, 12))
+        
+        plt.figure(2)
+        plt.plot(radii_centre, cl)
+        plt.plot(bem_results.r_centre, bem_results.c_l)
+        plt.ylim([0,1.5])
+        plt.show()
+    return ll_results
 
-    plt.show()
+def compare_ll_bem(v_0: float):
+    """
+    Function to compare the lifting line and the BEM results.
+    This function is intended to be purely plotting
+    """
+    results = task1(debug=False)
+
+    fig, axs = plt.subplots(6, 1)
+    # CL
+    axs[0].plot(results["r_centre"], results["cl"])
+    axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_l"])
+    # Cd
+    axs[1].plot(results["r_centre"], results["cd"])
+    axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_d"])
+    # induction 
+    axs[2].plot(results["r_centre"], results["a"])
+    axs[2].plot(results["bem_results"]["r_centre"], results["bem_results"]["a"])
     
+    # a prime
+    axs[3].plot(results["r_centre"], results["a_prime"])
+    axs[3].plot(results["bem_results"]["r_centre"], results["bem_results"]["a_prime"])
+    
+    #aoa 
+    axs[4].plot(results["r_centre"], results["aoa"])
+    axs[4].plot(results["bem_results"]["r_centre"], results["bem_results"]["alpha"])
+    
+    # circulation
+    axs[5].plot(results["r_centre"], results["bound_circulation"])
+    axs[5].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
+
+    # make plots look nice
+    helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
+                       font_size=12, y_label=["Cl", "Cd", "a", 
+                                              "a_prime", "Angle of \nattack",
+                                              "circulation"])
+    helper.handle_figure(fig, show=True, size=(6, 12))
+    #plt.show()
+
 if __name__== "__main__":
-    task1(debug=False)
+    v_0 = 10
+    compare_ll_bem(v_0)
