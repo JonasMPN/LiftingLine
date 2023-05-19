@@ -1,1 +1,1 @@
-from geometry import VortexSystem
+from vortex_system import VortexSystem
