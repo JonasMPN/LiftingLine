@@ -24,8 +24,8 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     root_radius:    inner radius of the blade
     :n_blades:      number of blades
     :density:       air density
-    :resolution:    resolution used in the bem
-    :return:        induction factor a for the whole rotor
+    :resolution:    spanwise resolution
+    :return:        induction factor a for the whole rotor and the result dataframe
     """
 
     bem = BEM.BEM(data_root="../data", file_airfoil="polar.xlsx")  # initialize BEM and set some params
@@ -43,6 +43,7 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     # induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
     # induction = scipy.optimize.newton(res,0.2)
     return 1/2*(1-np.sqrt(1-C_T)), bem.current_results  # analytical induction factor solution
+
 
 def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho : float = 1.225,
               path_to_polar: str="../data/polar.xlsx") -> np.ndarray:
@@ -64,6 +65,67 @@ def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho 
     lift = 0.5*rho*chord*inflow_speed**2*cl
     return lift, cl, cd
 
+
+def c_normal(phi: float, c_lift: float, c_drag: float) -> float:
+    """
+    Calculates an aerodynamic "lift" coefficient according to a coordinate transformation with phi
+    :param phi: angle between flow and rotational direction in rad
+    :param c_lift: lift coefficient old coordinate system
+    :param c_drag: lift coefficient old coordinate system
+    :return: Normal force in Newton
+    """
+    return c_lift*np.cos(phi)+c_drag*np.sin(phi)
+
+
+def c_tangent(phi: float, c_lift: float, c_drag: float) -> float:
+    """
+    Calculates an aerodynamic "drag" coefficient according to a coordinate transformation with phi
+    :param phi: angle between flow and rotational direction in rad
+    :param c_lift: lift coefficient old coordinate system
+    :param c_drag: lift coefficient old coordinate system
+    :return: Normal force in Newton
+    """
+    return c_lift*np.sin(phi)-c_drag*np.cos(phi)
+
+
+def coeff_to_force(coeff, wind_speed, chord, density):
+    """
+    Turn a force coefficient into the corresponding force per unit length
+    """
+    force = coeff * (0.5 * density * chord * wind_speed**2)
+    return force
+
+
+def force_to_coeff(force, wind_speed, chord, density):
+    """
+    Turn a force per unit length into the corresponding force coefficient
+    """
+    coeff = force / (0.5 * density * chord * wind_speed**2)
+    return coeff
+
+
+def calc_forces(cl, cd, aoa, chord, length, wind_speed, density,
+                inner_radius, outer_radius, n_blades):
+    """
+    Compute the axial and tangential forces as well as thrust and the coefficient
+    expect aoa in degrees
+    """
+    # tangential force
+    breakpoint()
+    phi = np.deg2rad(aoa)
+    c_n = c_normal(phi, cl, cd)
+    c_t = c_tangent(phi, cl, cd)
+    f_n = coeff_to_force(c_n, wind_speed, chord, density)
+    f_t = coeff_to_force(c_t, wind_speed, chord, density)
+    breakpoint() 
+    #thrust = n_blades*scipy.integrate.simpson([*f_n, 0], [*radial_positions, self.rotor_radius])
+    thrust = np.sum(f_n * length) * n_blades
+    rotor_area = np.pi * (inner_radius ** 2 - outer_radius ** 2)
+    C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area)  # obtain corresponding thrust coefficient
+
+    forces = {"f_t":f_t, "f_n":f_n, "thrust": thrust, "thrust_coeff": C_T}
+    return forces
+
 def calc_circulation(lift: np.ndarray,
                      u_inflow: float or np.ndarray,
                      old_circulation: np.ndarray,
@@ -72,22 +134,19 @@ def calc_circulation(lift: np.ndarray,
     Compute the circulation at every control point based on Kutta-Joukowsky. Uses some under-relaxation.
 
     :lift:              Lift per unit span for every section of the blade
-    :old_circulation:   Old circulation 
-    :u_infty:           Local velocity magnitude 
-    :rho:               Fluid density 
+    :old_circulation:   Old circulation
+    :u_infty:           Local velocity magnitude
+    :rho:               Fluid density
     """
     return (old_circulation+lift/(rho*u_inflow))/2
 
 
 def calc_circulation_from_cl(cl: np.array,
-                             c: np.array,
+                             chord: np.array,
                              a: np.array,
                              u_inf: float):
-    """
-    
-    """
     breakpoint()
-    gamma = cl * 0.5 * c * (1-a) * u_inf
+    gamma = cl * 0.5 * chord * (1-a) * u_inf
     return gamma
 
 
@@ -98,8 +157,8 @@ def calc_velocity(u_inf: float, omega: float,
     """
     u = u_inf+u_induced     # x-component
     v = omega*radial_positions+v_induced   # y - component
-    velocity_magnitude = np.sqrt(u**2 + v**2) # absolute
-    return {"u": u, "v": v, "magnitude":velocity_magnitude} # return a dict!
+    velocity_magnitude = np.sqrt(u**2 + v**2)  # absolute
+    return {"u": u, "v": v, "magnitude": velocity_magnitude}  # return a dict!
 
 
 def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
@@ -119,6 +178,7 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
         
     else:
         radii_ends = (np.sin(np.linspace(-np.pi/2, np.pi/2, resolution_ll))/2+0.5)*(radius-inner_radius)+inner_radius # sine
+    element_length = [ radii_ends[i+1] - radii_ends[i] for i in range(len(radii_ends)-1)]
     # distribution
 
     # M: changed chord and twist to the edges of an element.... if that really makes sense needs to be discussed
@@ -265,9 +325,12 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     axial_induction = - u_induced / v_0 
     a_prime = v_induced / (omega * radii_centre)  
 
-    ll_results = {"r_centre": radii_centre, "u_induced": u_induced, "lift": lift,
-                  "cl": cl, "cd": cd_current, "a": axial_induction, 
-                  "a_prime": a_prime, "aoa":np.rad2deg(effective_aoa),
+    ll_results = {"r_centre": radii_centre, "element_length":element_length,
+                  "chord":chord_centre, "twist":twist_centre,
+                  "u_induced": u_induced, "lift": lift,
+                  "cl": cl, "cd": cd_current,
+                  "a": axial_induction, "a_prime": a_prime,
+                  "aoa":np.rad2deg(effective_aoa),
                   "bound_circulation":bound_circulation,
                   "bem_results": bem_results}
 
@@ -333,17 +396,24 @@ def task1(debug=False):
         plt.show()
     return ll_results
 
-def compare_ll_bem(v_0: float):
+def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     """
     Function to compare the lifting line and the BEM results.
     This function is intended to be purely plotting
     """
     results = task1(debug=False)
-
-    fig, axs = plt.subplots(6, 1)
+    forces = calc_forces(results["cl"], results["cd"], results["aoa"],
+                         results["chord"], results["element_length"],
+                         v_0, density, inner_radius, outer_radius, n_blades)
+    print(forces["thrust"])
+    print(forces["thrust_coeff"])
+          #\nThe thrust coeff is:{forces["thrust_coefficient"]}")
+    fig, axs = plt.subplots(7, 1)
+    
     # CL
     axs[0].plot(results["r_centre"], results["cl"])
     axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_l"])
+   
     # Cd
     axs[1].plot(results["r_centre"], results["cd"])
     axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_d"])
@@ -363,14 +433,23 @@ def compare_ll_bem(v_0: float):
     axs[5].plot(results["r_centre"], results["bound_circulation"])
     axs[5].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
 
+    # Forces
+    axs[6].plot(results["r_centre"], forces["f_n"])
+    axs[6].plot(results["r_centre"], results["lift"])
+    #axs[7].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
     # make plots look nice
     helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
                        font_size=12, y_label=["Cl", "Cd", "a", 
                                               "a_prime", "Angle of \nattack",
-                                              "circulation"])
+                                              "circulation", "f_t"])
     helper.handle_figure(fig, show=True, size=(6, 12))
     #plt.show()
 
 if __name__== "__main__":
     v_0 = 10
-    compare_ll_bem(v_0)
+    outer_radius = 50
+    inner_radius = 0.2 * outer_radius
+    n_blades = 3
+    density = 1.225
+
+    compare_ll_bem(v_0, inner_radius, outer_radius, n_blades, density)
