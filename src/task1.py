@@ -1,6 +1,5 @@
 # Task 1 of lifting line Assignment
 
-from testpck.testfile import testfunc
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -41,9 +40,9 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area) # obtain corresponding thrust coefficient
     # And finally we obtain the induction from solving the CT - induction equation for the induction
     # res = lambda a : 4*a *(1 -a) - C_T #
-    # #induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
+    # induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
     # induction = scipy.optimize.newton(res,0.2)
-    return 1/2*(1-np.sqrt(1-C_T)) , bem.current_results # analytical induction factor solution
+    return 1/2*(1-np.sqrt(1-C_T)), bem.current_results  # analytical induction factor solution
 
 def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho : float = 1.225,
               path_to_polar: str="../data/polar.xlsx") -> np.ndarray:
@@ -107,10 +106,10 @@ def task1(debug=False):
     inner_radius = 0.2 * radius         # inner end of the blade section
     pitch_deg = -2                      # pitch in degrees
     pitch = np.deg2rad(pitch_deg)       # pitch angle in radian
-    resolution = 11                     # Spanwise resolution -> seems to break for larger values
-    residual_max = 1e-5
+    resolution = 14                     # Spanwise resolution -> seems to break for larger values
+    residual_max = 1e-10
     n_iter_max = 1000
-    vortex_core_radius = 0.5
+    vortex_core_radius = 1
     
     #------------ Operational data ---------------#
     v_0 = 10                            # [m] Wind speed
@@ -145,11 +144,11 @@ def task1(debug=False):
     # Now we have the geometry of the blade. This knowledge is inserted into a vortex_system object in PART 2.
 
 
-    # -------------- Run BEM ----------------# 
+    # -------------- Run BEM ----------------#
     # We now want to run BEM to obtain a CT value which we can use to compute the wake convection
-    #breakpoint()
+    # breakpoint()
     
-    induction , bem_results = calc_induction_bem(tsr,-2)
+    induction, bem_results = calc_induction_bem(tsr, -2)
     u_rotor = v_0*(1-induction)
     print("BEM done")
     
@@ -205,8 +204,15 @@ def task1(debug=False):
     twist_centre = -twist_chord.get_twist(radii_centre, radius) # twist at the centre of each element
     chord_centre = twist_chord.get_chord(radii_centre, radius) # chord at the centre of each element
 
-    u_induced = np.zeros(radii_centre.shape)
-    v_induced = np.zeros(radii_centre.shape)
+    #u_induced = np.zeros(radii_centre.shape)
+    # make interpolation function of the induction 
+
+    u_induced_function = scipy.interpolate.interp1d(bem_results.r_centre, bem_results.a)
+    v_induced_function = scipy.interpolate.interp1d(bem_results.r_centre, bem_results.a_prime)
+    u_induced = v_0 * u_induced_function(radii_centre)
+    v_induced = omega * radii_centre * v_induced_function(radii_centre)
+    #u_induced = np.zeros(radii_centre.shape)
+    #v_induced = np.zeros(radii_centre.shape)
     inflow_velocity = calc_velocity(v_0, omega, radii_centre, u_induced, v_induced) # we now have the u,v velocity
     # vector
     # We can compute the effective angle of attack with it
@@ -270,19 +276,25 @@ def task1(debug=False):
     axial_induction = u_induced / v_0
 
     #---------------- Plotting ----------------------#
-    fig, axs = plt.subplots(6,1)
-    axs[0].plot(radii_centre, bound_circulation)
+    fig, axs = plt.subplots(7, 1)
+    axs[0].plot(radii_centre, bound_circulation, "x")
     axs[1].plot(radii_ends, trailing_circulation)
     axs[2].plot(radii_centre, cl)
     axs[3].plot(radii_centre, u_induced)
     axs[4].plot(radii_centre, v_induced)
     axs[5].plot(radii_centre, u_induced/v_0)
+    axs[6].plot(radii_centre, v_induced / (omega * radii_centre))
     axs[2].plot(bem_results.r_centre, bem_results.c_l)
-    helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3, font_size=12,
-                       y_label=["bound\ncirculation", "trailing\ncirculation", "Cl", "u induced", "v induced", "induction"])
-    helper.handle_figure(fig, show=True, size=(6,12))
+    helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
+                       font_size=12, y_label=["bound\ncirculation", "trailing\ncirculation",
+                                "Cl", "u induced", "v induced", "induction", "a'"])
+    helper.handle_figure(fig, show=True, size=(6, 12))
+    
+    plt.figure(2)
+    plt.plot(radii_centre, cl)
+    plt.plot(bem_results.r_centre, bem_results.c_l)
 
     plt.show()
-
-if __name__=="__main__":
+    
+if __name__== "__main__":
     task1(debug=False)

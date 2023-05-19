@@ -2,3 +2,4 @@
 *.swp
 */__pycache__
 __pycache__
+BEM_results.dat
