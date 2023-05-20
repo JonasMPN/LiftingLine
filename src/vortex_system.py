@@ -149,12 +149,17 @@ class VortexSystem:
         bound vortices between the blade element ends causes the middle of the bound vortices to NOT lie on the
         actual quarter chord point of the middle of the blade element. This is because the actual quarter chord point
         follows the proper angles while the bound vortex connection is a straight line.
+        ATTENTION 2: If a rotor array is used, this function must be called after 'set_rotor_array' if the first
+        rotor has a rotation.
         :return:
         """
+        rotor_angle = 0 if self.rotor_rotations is None else self.rotor_rotations[0]
         qc_elements = self.c_elements/4 # quarter chord of blade element ends
         x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord of blade element ends
-        y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord of blade element ends
-        coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, self.r_elements)])
+        y_qc = np.cos(self.blade_rotation)*qc_elements-np.sin(rotor_angle)*self.r_elements # y position of the
+        # quarter chord of blade element ends
+        z_qc = np.cos(rotor_angle)*self.r_elements # z position of the quarter chord of the blade ends
+        coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, z_qc)])
         # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends,
         # i.e. on the bound vortex in the radial middle of the element.
         self.control_points = (coordinates_ends[:-1]+coordinates_ends[1:])/2
