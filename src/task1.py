@@ -164,11 +164,11 @@ def calc_velocity(u_inf: float, omega: float,
 
 
 def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
-            pitch, resolution_ll, vortex_core_radius, debug,
+            pitch, resolution_ll, vortex_core_radius, debug, wake_length,
             disctretization="sin",
-            residual_max=1e-10, n_iter_max=1000):
-    
-    # --------------Get twist and chord distributions ----------------#
+            residual_max=1e-10, n_iter_max=1000, wake_speed='from_BEM', resolution_wake=50):
+
+    #--------------Get twist and chord distributions ----------------#
     
     # !!!!!!! Needs to be adapted!
     # Get the positions along the span for each element and the nodes
@@ -201,12 +201,19 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
 
     # -------------- Run BEM ----------------#
     # We now want to run BEM to obtain a CT value which we can use to compute the wake convection
-    
     induction, bem_results = calc_induction_bem(tsr, -2)
-    u_rotor = v_0*(1-induction)
+    u_rotor = v_0 * (1 - induction)
+
+    # Values for the variable 'wake_speed'
+    # 1. String 'from_BEM' -> then the speed at which the wake propagates is calculated by v_0*(1-induction)
+    # 2. Numerical value (e.g. 1,2,3,4 etc.) -> then the speed at which the wake propagates takes the value you gave
+    if wake_speed == 'from_BEM':
+        wake_speed = u_rotor  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
     print("BEM done")
-    
-    # ------------------------------------------------------#
+    #else:
+    #    wake_speed = wake_speed
+
+    #------------------------------------------------------#
     # PART 2 - set up wake system
     # ------------------------------------------------------#
     
@@ -214,9 +221,8 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     
     # compute inputs for the wake tool:
     omega = tsr*v_0/radius
-    wake_speed = u_rotor  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
-    wake_length = 1 * 2*radius  # how many diameters should the wake have?
-    resolution_wake = 50
+    # wake_length = 1 * 2*radius # how many diameters should the wake have?
+    # resolution_wake = 50
 
     # initializy wake geometry
     vortex_system = VortexSystem()
@@ -361,18 +367,18 @@ def task1(debug=False):
     residual_max = 1e-10
     n_iter_max = 1000
     vortex_core_radius = 1
+    wake_length = 1 * 2 * radius
     
     #------------ Operational data ---------------#
     v_0 = 10                            # [m] Wind speed
     air_density = 1.225
     tsr = 8                      # Tip speed ratios  to be calculated
     airfoil = pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
-    
-    
+
 
     ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
                          inner_radius, pitch, resolution_ll, vortex_core_radius,
-                         debug, disctretization="uniform",
+                         debug, wake_length, disctretization="uniform",
                          residual_max=residual_max, n_iter_max=n_iter_max)
 
     #---------------- Plotting ----------------------#
