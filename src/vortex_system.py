@@ -24,23 +24,44 @@ class VortexSystem:
         self.wake_length = None
         self.resolution = None
 
+        # rotor array properties
+        self.rotor_positions = None
+        self.rotor_rotations = None
+
         # control points
         self.control_points = None
         self.n_control_points = None
 
         # instance properties
-        # bound vortices
+        # bound vortices. The 'X-wise' ones have a structure that allow for foolproof access of which 'X' the
+        # coordinates come from. The same variable without the 'X-wise' has all coordinates combined in one large
+        # numpy array.
         self.coordinates_blade_bound_elementwise = None
         self.coordinates_blade_bound = None
+
+        self.coordinates_rotor_bound_bladewise = None
         self.coordinates_rotor_bound = None
+
+        self.coordinates_rotor_array_bound_rotorwise = None
+        self.coordinates_rotor_array_bound = None
+
         # trailing vortices
         self.coordinates_blade_trailing_elementwise = None
         self.coordinates_blade_trailing = None
+
+        self.coordinates_rotor_trailing_bladewise = None
         self.coordinates_rotor_trailing = None
+
+        self.coordinates_rotor_array_trailing_rotorwise = None
+        self.coordinates_rotor_array_trailing = None
 
         # error clarification
         self.rotor_set = False
+        self.rotor_array_set = False
         self.wake_set = False
+        self.blade_calculated = False
+        self.rotor_calculated = False
+        self.rotor_array_calculated = False
 
     def set_blade(self,
                   r_elements: np.ndarray,
@@ -82,16 +103,28 @@ class VortexSystem:
         # bound vortex system
         self.coordinates_blade_bound_elementwise = None
         self.coordinates_blade_bound = None
+        self.coordinates_rotor_bound_bladewise = None
         self.coordinates_rotor_bound = None
-        # trailing vortex system
+        self.coordinates_rotor_array_bound_rotorwise = None
+        self.coordinates_rotor_array_bound = None
+
+        # trailing vortices
         self.coordinates_blade_trailing_elementwise = None
         self.coordinates_blade_trailing = None
+        self.coordinates_rotor_trailing_bladewise = None
         self.coordinates_rotor_trailing = None
+        self.coordinates_rotor_array_trailing_rotorwise = None
+        self.coordinates_rotor_array_trailing = None
 
         # 'rotor_set' is internally used to provide meaningful error messages if the user wants to perform
         # calculations that require the rotor properties to be set.
         self.rotor_set = True
         return None
+
+    def set_rotor_array(self, rotor_positions: list[list] or list[np.ndarray], rotor_rotations: list or np.ndarray):
+        self.rotor_positions = self._list_to_ndarray(*rotor_positions)
+        self.rotor_rotations, = self._list_to_ndarray(rotor_rotations)
+        self.rotor_array_set = True
 
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
@@ -159,60 +192,17 @@ class VortexSystem:
         # use
         return None
 
-    def blade_trailing(self) -> np.ndarray:
-        """
-        Combines the element-wise trailing vortex system for one blade into one np.ndarray. The logic is explained in
-        _combine_elementwise.
-        :return: points of the trailing vortices of a blade
-        """
-        self._combine_elementwise(called_from=self.blade_trailing,
-                                  coordinates_from=self.coordinates_blade_trailing_elementwise,
-                                  if_not_do=self._blade_trailing_elementwise,
-                                  combine_to="coordinates_blade_trailing")
-        return self.coordinates_blade_trailing
-
-    def blade_bound(self) -> np.ndarray:
-        """
-        Combines the element-wise bound vortex system for one blade as one data structure. The logic is explained in
-        _combine_elementwise.
-        :return: points of the bound vortices of a blade
-        """
-        self._combine_elementwise(called_from=self.blade_bound,
-                                  coordinates_from=self.coordinates_blade_bound_elementwise,
-                                  if_not_do=self._blade_bound_elementwise,
-                                  combine_to="coordinates_blade_bound")
-        return self.coordinates_blade_bound
-
     def blade(self) -> None:
         """
         Calculates the vortex system (as in coordinates of the line vortices) of a blade, meaning its trailing and
         bound vortex system.
         :return: None
         """
-        self.blade_trailing()
-        self.blade_bound()
-        return None
-
-    def rotor_trailing(self) -> None:
-        """
-        Creates the full trailing vortex system of a rotor. The logic is explained in _rotate_combined.
-        :return: None
-        """
-        self._rotate_combined(called_from=self.rotor_trailing,
-                              coordinates_from=self.coordinates_blade_trailing,
-                              if_not_do=self.blade_trailing,
-                              rotate_to="coordinates_rotor_trailing")
-        return None
-
-    def rotor_bound(self) -> None:
-        """
-        Creates the full bound vortex system of a rotor. The logic is explained in _rotate_combined.
-        :return: None
-        """
-        self._rotate_combined(called_from=self.rotor_bound,
-                              coordinates_from=self.coordinates_blade_bound,
-                              if_not_do=self.blade_bound,
-                              rotate_to="coordinates_rotor_bound")
+        self._assert_properties("blade", self.blade)
+        self._blade_bound()
+        self._assert_properties("wake", self.blade)
+        self._blade_trailing()
+        self.blade_calculated = True
         return None
 
     def rotor(self) -> None:
@@ -221,31 +211,57 @@ class VortexSystem:
         bound vortex system.
         :return:
         """
-        self.rotor_trailing()
-        self.rotor_bound()
+        self._assert_properties("blade", self.rotor)
+        self._rotor_bound()
+        self._assert_properties("wake", self.rotor)
+        self._rotor_trailing()
+        self.rotor_calculated = True
         return None
 
-    def bound_induction_matrices(self, vortex_core_radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def rotor_array(self) -> None:
+        self._assert_properties("array", self.rotor_array)
+        self._assert_properties("blade", self.rotor_array)
+        self._rotor_array_bound(self.rotor_positions, self.rotor_rotations)
+        self._assert_properties("wake", self.rotor_array)
+        self._rotor_array_trailing(self.rotor_positions, self.rotor_rotations)
+        self.rotor_array_calculated = True
+        return None
+
+    def bound_induction_matrices(self,
+                                 vortex_core_radius: float,
+                                 vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Calculates the induction matrix from bound vortices of the rotor on all control points.
+        Calculates the induction matrix from bound vortices of the 'vortex_sytem_type' on all control points.
         :return: tuple with the induction matrices which are numpy arrays
+        :param vortex_core_radius: Radius of the vortex core
+        :param vortex_system_type: Which vortex system to use. Valid choices are: "blade", "rotor", and "rotor_array"
+        :return:
         """
-        self._assert_bound("rotor") # assert that the vortex points of the rotor vortex system are calculated
+        self._assert_vortex_system(vortex_system_type) # assert that the needed vortex coordinates have been calculated
+        coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_array_bound_rotorwise
+        if vortex_system_type == "rotor":
+            coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_bound_bladewise
+        elif vortex_system_type == "blade":
+            coordinates_rotor_array_bound_rotorwise = [self.coordinates_blade_bound]
 
         n_circulations = len(self.r_elements)-1
+        n_rotors = len(coordinates_rotor_array_bound_rotorwise)
         single_trailing_induction_matrices = {  # the inductions are calculated for individual bound vortex systems
             # first (debugging help)
-            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)]
+            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
+            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
+            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)]
         }
-        for bound_system_i, bound in enumerate(self.coordinates_rotor_bound):
-            for cp_i, control_point in enumerate(self.control_points):
-                for vortex_i, (vortex_start, vortex_end) in enumerate(zip(bound[:-1], bound[1:])):
-                    induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
-                    single_trailing_induction_matrices["x"][bound_system_i][cp_i, vortex_i] = induction_factors[0]
-                    single_trailing_induction_matrices["y"][bound_system_i][cp_i, vortex_i] = induction_factors[1]
-                    single_trailing_induction_matrices["z"][bound_system_i][cp_i, vortex_i] = induction_factors[2]
+        for i_rotor, rotor_bound in enumerate(coordinates_rotor_array_bound_rotorwise):
+            for i_blade in range(self.n_blades):
+                i_bound_system = i_rotor*self.n_blades+i_blade
+                blade_bound = rotor_bound[i_blade*n_circulations:(i_blade+1)*n_circulations, :]
+                for cp_i, control_point in enumerate(self.control_points):
+                    for vortex_i, (vortex_start, vortex_end) in enumerate(zip(blade_bound[:-1], blade_bound[1:])):
+                        induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
+                        single_trailing_induction_matrices["x"][i_bound_system][cp_i, vortex_i] = induction_factors[0]
+                        single_trailing_induction_matrices["y"][i_bound_system][cp_i, vortex_i] = induction_factors[1]
+                        single_trailing_induction_matrices["z"][i_bound_system][cp_i, vortex_i] = induction_factors[2]
 
         induction_matrices = {  # initialise container for the final, summed together induction factor matrices
             "x": np.zeros((self.n_control_points, n_circulations)),
@@ -257,39 +273,52 @@ class VortexSystem:
                 induction_matrices[direction] += induction_mat  # sum the contributions of all blade wakes
         return induction_matrices["x"], induction_matrices["y"], induction_matrices["z"]
 
-    def trailing_induction_matrices(self, vortex_core_radius: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def trailing_induction_matrices(self,
+                                    vortex_core_radius: float,
+                                    vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from the wake of the rotor on all control points.
         :return: tuple with the induction matrices for u, v and w
         """
-        self._assert_trailing("rotor")  # a rotor wake has to exist
+        self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
+        coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_array_trailing_rotorwise
+        if vortex_system_type == "rotor":
+            coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_trailing_bladewise
+        elif vortex_system_type == "blade":
+            coordinates_rotor_array_trailing_rotorwise = [self.coordinates_blade_trailing]
 
         n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed (which has a
         # constant circulation!)
+        n_rotors = len(coordinates_rotor_array_trailing_rotorwise)
         single_trailing_induction_matrices = { # the inductions are calculated for individual trailing vortex systems
             # first (debugging help)
-            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)],
-            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades)]
+            "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
+            "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
+            "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)]
         }
-        for wake_system_i, wake in enumerate(self.coordinates_rotor_trailing): # iterate over the wakes of each blade
-            for cp_i, control_point in enumerate(self.control_points): # iterate over the control points
-                for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
-                    # element. Every blade element thus influences (thus inducing_element) the current element (which
-                    # is therefore called induced_element, because it 'receives' an induced velocity)
 
-                    # get the start points of each vortex element of the trailing vortex from the inducing blade element
-                    vortex_starts = wake[inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)-1]
-                    # get the end points of each vortex element of the trailing vortex from the inducing blade element
-                    vortex_ends = wake[1+inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)]
-                    induction_factors = np.zeros(3)
-                    for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
-                        induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
-                    # place the induction factors (x, y, and z component) of this wake in its respective wake
-                    # induction matrix
-                    single_trailing_induction_matrices["x"][wake_system_i][cp_i, inducing_element] = induction_factors[0]
-                    single_trailing_induction_matrices["y"][wake_system_i][cp_i, inducing_element] = induction_factors[1]
-                    single_trailing_induction_matrices["z"][wake_system_i][cp_i, inducing_element] = induction_factors[2]
+        for i_rotor, rotor_trailing in enumerate(coordinates_rotor_array_trailing_rotorwise):
+            for i_blade in range(self.n_blades):
+                i_wake_system = i_rotor*self.n_blades+i_blade
+                n_coords_per_blade = n_circulations*(self.resolution+1)
+                blade_trailing = rotor_trailing[i_blade*n_coords_per_blade:(i_blade+1)*n_coords_per_blade, :]
+                for cp_i, control_point in enumerate(self.control_points): # iterate over the control points
+                    for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
+                        # element. Every blade element thus influences (thus inducing_element) the current element (which
+                        # is therefore called induced_element, because it 'receives' an induced velocity)
+
+                        # get the start points of each vortex element of the trailing vortex from the inducing blade element
+                        vortex_starts = blade_trailing[inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)-1]
+                        # get the end points of each vortex element of the trailing vortex from the inducing blade element
+                        vortex_ends = blade_trailing[1+inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)]
+                        induction_factors = np.zeros(3)
+                        for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
+                            induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
+                        # place the induction factors (x, y, and z component) of this wake in its respective wake
+                        # induction matrix
+                        single_trailing_induction_matrices["x"][i_wake_system][cp_i, inducing_element] = induction_factors[0]
+                        single_trailing_induction_matrices["y"][i_wake_system][cp_i, inducing_element] = induction_factors[1]
+                        single_trailing_induction_matrices["z"][i_wake_system][cp_i, inducing_element] = induction_factors[2]
 
         induction_matrices = { # initialise container for the final, summed together induction factor matrices
             "x": np.zeros((self.n_control_points, n_circulations)),
@@ -316,13 +345,11 @@ class VortexSystem:
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         if trailing:
-            self._assert_trailing("blade")
             for r in self.r_elements:
                 ax.plot(self.coordinates_blade_trailing_elementwise["x"][r],
                         self.coordinates_blade_trailing_elementwise["y"][r],
                         self.coordinates_blade_trailing_elementwise["z"][r])
         if bound:
-            self._assert_bound("blade")
             x_bound = self.coordinates_blade_bound_elementwise["x"]["_"]
             y_bound = self.coordinates_blade_bound_elementwise["y"]["_"]
             z_bound = self.coordinates_blade_bound_elementwise["z"]["_"]
@@ -364,19 +391,58 @@ class VortexSystem:
         colours = ["b", "g", "r", "c", "m", "y", "k"]
         n_elements = len(self.r_elements)
         if trailing:
-            self._assert_trailing("rotor")
-            for trailing, c in zip(self.coordinates_rotor_trailing, colours[:len(self.coordinates_rotor_trailing)]):
+            for trailing, c in zip(self.coordinates_rotor_trailing_bladewise, colours):
                 for element in range(n_elements):
                     ax.plot(trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 0],
                             trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 1],
                             trailing[element*(self.resolution+1):(element+1)*(self.resolution+1), 2], color=c)
         if bound:
-            self._assert_bound("rotor")
-            for bound, c in zip(self.coordinates_rotor_bound, colours[:len(self.coordinates_rotor_trailing)]):
+            for bound, c in zip(self.coordinates_rotor_bound_bladewise, colours):
                 for element in range(n_elements):
                     ax.plot(bound[element*n_elements:(element+1)*n_elements, 0],
                             bound[element*n_elements:(element+1)*n_elements, 1],
                             bound[element*n_elements:(element+1)*n_elements, 2], color=c)
+
+        if control_points:
+            if self.control_points is None:
+                raise ValueError("No control points can be visualised because none have been set. Set them using "
+                                 "'set_control_points()' first.")
+            for control_point in self.control_points:
+                ax.plot(control_point[0], control_point[1], control_point[2], "ko")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        if show:
+            plt.show()
+            return None
+        else:
+            return fig, ax
+
+    def rotor_array_visualisation(self,
+                                  trailing: bool=True,
+                                  bound: bool=True,
+                                  control_points: bool=False,
+                                  show: bool=True) -> None or tuple[plt.figure, plt.axes]:
+        fig = plt.figure()
+        ax = fig.add_subplot(projection="3d")
+        colours = ["b", "g", "r", "c", "m", "y", "k"]
+        n_blade_elements = len(self.r_elements)
+        if trailing:
+            for coordinates_rotor, c in zip(self.coordinates_rotor_array_trailing_rotorwise, colours):
+                for i_blade in range(self.n_blades):
+                    n_coords_per_blade = n_blade_elements*(self.resolution+1)
+                    coordinates = coordinates_rotor[i_blade*n_coords_per_blade:(i_blade+1)*n_coords_per_blade, :]
+                    for element in range(n_blade_elements):
+                        ax.plot(coordinates[element*(self.resolution+1):(element+1)*(self.resolution+1), 0],
+                                coordinates[element*(self.resolution+1):(element+1)*(self.resolution+1), 1],
+                                coordinates[element*(self.resolution+1):(element+1)*(self.resolution+1), 2], color=c)
+
+        if bound:
+            for coordinates_rotor, c in zip(self.coordinates_rotor_array_bound_rotorwise, colours):
+                for element in range(n_blade_elements):
+                    ax.plot(coordinates_rotor[element*n_blade_elements:(element+1)*n_blade_elements, 0],
+                            coordinates_rotor[element*n_blade_elements:(element+1)*n_blade_elements, 1],
+                            coordinates_rotor[element*n_blade_elements:(element+1)*n_blade_elements, 2], color=c)
 
         if control_points:
             if self.control_points is None:
@@ -440,49 +506,9 @@ class VortexSystem:
         self.coordinates_blade_trailing_elementwise = {"x": x, "y": y, "z": z}
         return self.coordinates_blade_trailing_elementwise
 
-    def _set(self, **kwargs) -> None:
-        """
-        Sets any parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
-        :param kwargs:
-        :return:
-        """
-        existing_parameters = [*self.__dict__]
-        for parameter, value in kwargs.items(): # puts the tuples of parameters and values
-            if parameter not in existing_parameters:
-                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
-            self.__dict__[parameter] = value
-        return None
-
-    def _assert_properties(self, fnc):
-        for params, was_set in {"rotor": self.rotor_set, "wake": self.wake_set}.items():
-            if not was_set:
-                raise ValueError(f"{params} properties have to be set before using {fnc.__name__}().")
-        return None
-
-    def _assert_trailing(self, vortex_system_type):
-        response = {
-            "blade": [self.coordinates_blade_trailing, "rotor_trailing(), blade_trailing(), rotor(), or blade()"],
-            "rotor": [self.coordinates_rotor_trailing, "rotor_trailing() or rotor()"]
-        }
-        if response[vortex_system_type][0] is None:
-            raise ValueError(f"A {vortex_system_type} trailing vortex system has to be calculated first. Use"
-                             f" {response[vortex_system_type][1]} first.")
-        return None
-
-    def _assert_bound(self, vortex_system_type):
-        response = {
-            "blade": [self.coordinates_blade_bound, "rotor_bound(), blade_bound(), rotor(), or blade()"],
-            "rotor": [self.coordinates_rotor_bound, "rotor_bound() or rotor()"]
-        }
-        if response[vortex_system_type][0] is None:
-            raise ValueError(f"A {vortex_system_type} bound vortex system has to be calculated first. Use"
-                             f" {response[vortex_system_type][1]} first.")
-        return None
-
-    def _combine_elementwise(self, called_from, coordinates_from, if_not_do, combine_to: str) -> None:
+    def _combine_elementwise_blade(self, coordinates_from, if_not_do, combine_to: str) -> None:
         """
         Combines element-wise coordinates into a np.ndarray of size (N,3).
-        :param called_from:         Which function calls _combine_elementwise(). This is for user error clarification.
         :param coordinates_from:    The element-wise coordinates of the vortex system that are to be combined
         :param if_not_do:           Function that calculates these elementwise coordinates if they are not yet
                                     calculated
@@ -490,7 +516,6 @@ class VortexSystem:
                                     saved.
         :return: None
         """
-        self._assert_properties(called_from) # assert that the rotor and wake properties have been set
         if coordinates_from is None: # if the element-wise coordinates do not yet exist
             coordinates_from = if_not_do() # then calculate them
         self.__dict__[combine_to] = np.asarray([ # save combined coordinates to a np.ndarray of size (N,3)
@@ -500,19 +525,17 @@ class VortexSystem:
         ]).T
         return None
 
-    def _rotate_combined(self,
-                         called_from,
-                         coordinates_from,
-                         if_not_do,
-                         rotate_to: str) -> None:
+    def _rotate_combined_blade(self,
+                               coordinates_from,
+                               if_not_do,
+                               rotate_to: str) -> None:
         """
         Creates a specific (bound or trailing) vortex system for the specified rotor.
         It does that by taking the specific vortex system from a single blade and rotating it 'n_blades'-1 times. The
         resulting vortex system is saved as a list with the vortex system of each blade as a unique entry. Each entry is
         a numpy array of size (N,3). Each row corresponds to one vortex line and the columns correspond to the three
-        axes.
+        axes. N: roughly blade elements times resolution of the trailing vortices.
 
-        :param called_from:         Which function calls _rotate_combined(). This is for user error clarification.
         :param coordinates_from:    The coordinates of the vortex system that is to be rotated
         :param if_not_do:           Function that calculates the combined coordinates of the vortex system if they are
                                     not yet calculated
@@ -520,7 +543,6 @@ class VortexSystem:
                                     saved.
         :return:
         """
-        self._assert_properties(called_from) # assert that the rotor and wake properties have been set
         if coordinates_from is None: # if the combined coordinates do not yet exist
             coordinates_from = if_not_do() # then calculate them
         self.__dict__[rotate_to] = [coordinates_from] # start list with the un-rotated blade vortex system
@@ -530,6 +552,93 @@ class VortexSystem:
                                    [0, np.cos(rot_angle), np.sin(rot_angle)],
                                    [0, -np.sin(rot_angle), np.cos(rot_angle)]])
             self.__dict__[rotate_to].append(np.dot(coordinates_from, rot_matrix)) # add rotated vortex system
+        return None
+
+    def _combine_rotated_blades(self, coordinates_from, if_not_do, combine_to: str) -> None:
+        """
+        Combines blade-wise coordinates into a np.ndarray of size (N,3).
+        :param coordinates_from:    The blade-wise coordinates of the vortex system that are to be combined
+        :param if_not_do:           Function that calculates these blade-wise coordinates if they are not yet
+                                    calculated
+        :param save_to:             Class property name as string (without self.) to which the combined coordinates are
+                                    saved.
+        :return: None
+        """
+        if coordinates_from is None: # if the element-wise coordinates do not yet exist
+            coordinates_from = if_not_do() # then calculate them
+        self.__dict__[combine_to] = np.asarray([c.tolist() for c_bladewise in coordinates_from for c in c_bladewise])
+        return None
+
+    def _place_rotors(self, coordinates, combine_to: str, rotor_positions: list[np.ndarray],
+                      rotor_rotations: np.ndarray) -> None:
+        self.__dict__[combine_to] = list()
+        for position, rotation in zip(rotor_positions, rotor_rotations):
+            rot_matrix = np.array([[1, 0, 0], # calculate rotation matrix for the current blade
+                                   [0, np.cos(rotation), np.sin(rotation)],
+                                   [0, -np.sin(rotation), np.cos(rotation)]])
+            self.__dict__[combine_to].append(np.dot(coordinates, rot_matrix)+position)
+        return None
+
+    def _blade_bound(self) -> np.ndarray:
+        """
+        Combines the element-wise bound vortex system for one blade as one data structure. The logic is explained in
+        _combine_elementwise_blade.
+        :return: points of the bound vortices of a blade
+        """
+        self._combine_elementwise_blade(coordinates_from=self.coordinates_blade_bound_elementwise,
+                                        if_not_do=self._blade_bound_elementwise,
+                                        combine_to="coordinates_blade_bound")
+        return self.coordinates_blade_bound
+
+    def _blade_trailing(self) -> np.ndarray:
+        """
+        Combines the element-wise trailing vortex system for one blade into one np.ndarray. The logic is explained in
+        _combine_elementwise_blade.
+        :return: points of the trailing vortices of a blade
+        """
+        self._combine_elementwise_blade(coordinates_from=self.coordinates_blade_trailing_elementwise,
+                                        if_not_do=self._blade_trailing_elementwise,
+                                        combine_to="coordinates_blade_trailing")
+        return self.coordinates_blade_trailing
+
+    def _rotor_bound(self) -> np.ndarray:
+        """
+        Creates the full bound vortex system of a rotor. The logic is explained in _rotate_combined_blade.
+        :return: None
+        """
+        self._rotate_combined_blade(coordinates_from=self.coordinates_blade_bound,
+                                    if_not_do=self._blade_bound,
+                                    rotate_to="coordinates_rotor_bound_bladewise")
+        return self.coordinates_rotor_bound_bladewise
+
+    def _rotor_trailing(self) -> np.ndarray:
+        """
+        Creates the full trailing vortex system of a rotor. The logic is explained in _rotate_combined_blade.
+        :return: None
+        """
+        self._rotate_combined_blade(coordinates_from=self.coordinates_blade_trailing,
+                                    if_not_do=self._blade_trailing,
+                                    rotate_to="coordinates_rotor_trailing_bladewise")
+        return self.coordinates_rotor_trailing_bladewise
+
+    def _rotor_array_bound(self,
+                           rotor_positions: list[np.ndarray],
+                           rotor_rotations: np.ndarray) -> None:
+        self._combine_rotated_blades(coordinates_from=self.coordinates_rotor_bound_bladewise,
+                                     if_not_do=self._rotor_bound,
+                                     combine_to="coordinates_rotor_bound")
+        self._place_rotors(self.coordinates_rotor_bound, combine_to="coordinates_rotor_array_bound_rotorwise",
+                           rotor_positions=rotor_positions, rotor_rotations=rotor_rotations)
+        return None
+
+    def _rotor_array_trailing(self,
+                              rotor_positions: list[np.ndarray],
+                              rotor_rotations: np.ndarray) -> None:
+        self._combine_rotated_blades(coordinates_from=self.coordinates_rotor_trailing_bladewise,
+                                     if_not_do=self._rotor_trailing,
+                                     combine_to="coordinates_rotor_trailing")
+        self._place_rotors(self.coordinates_rotor_trailing, combine_to="coordinates_rotor_array_trailing_rotorwise",
+                           rotor_positions=rotor_positions, rotor_rotations=rotor_rotations)
         return None
 
     @staticmethod
@@ -566,6 +675,41 @@ class VortexSystem:
         else:
             return e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e))) # induced velocity of irrotational vortex
 
+    def _set(self, **kwargs) -> None:
+        """
+        Sets any parameters of the instance. Raises an error if a parameter is trying to be set that doesn't exist.
+        :param kwargs:
+        :return:
+        """
+        existing_parameters = [*self.__dict__]
+        for parameter, value in kwargs.items(): # puts the tuples of parameters and values
+            if parameter not in existing_parameters:
+                raise ValueError(f"Parameter {parameter} cannot be set. Settable parameters are {existing_parameters}.")
+            self.__dict__[parameter] = value
+        return None
+
+    def _assert_properties(self, check: str, called_from) -> None:
+        to_check = {
+            "blade": [self.rotor_set, "set_blade()"],
+            "wake": [self.wake_set, "set_wake()"],
+            "array": [self.rotor_array_set, "set_rotor_array()"]
+        }
+        if not to_check[check][0]:
+            raise ValueError(f"{check} properties have to be set using {to_check[check][1]} before calling "
+                             f"{called_from.__name__}().")
+        return None
+
+    def _assert_vortex_system(self, vortex_system_type: str):
+        response = {
+            "blade": [self.blade_calculated, "blade(), rotor(), or rotor_array()"],
+            "rotor": [self.rotor_calculated, "rotor(), or rotor_array()"],
+            "rotor_array": [self.rotor_array_calculated, "rotor_array()"]
+        }
+        if response[vortex_system_type][0] is None:
+            raise ValueError(f"A {vortex_system_type} trailing vortex system has to be calculated first. Use"
+                             f" {response[vortex_system_type][1]} first.")
+        return None
+
     @staticmethod
     def _float_to_ndarray(length: int, *args) -> list[np.ndarray]:
         """
@@ -573,3 +717,14 @@ class VortexSystem:
         array of length 'length' with all values being the initial float.
         """
         return [arg if type(arg) == np.ndarray else np.asarray([arg for _ in range(length)]) for arg in args]
+
+    @staticmethod
+    def _list_to_ndarray(*args) -> list[np.ndarray]:
+        """
+        Checks if 'args' are lists or numpy ndarrays. If they are a list, convert them to numpy ndarrays. Returns a
+        list of all converted 'args'
+        :param args: lists or numpy ndarrays
+        :return: list of numpy ndarrays
+        """
+        return  [arg if type(arg) == np.ndarray else np.asarray(arg) for arg in args]
+
