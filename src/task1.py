@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy
-from bem_pckg.helper_functions import Helper # problem -> different versions of these helper functions 
+from bem_pckg.helper_functions import Helper  # problem -> different versions of these helper functions
 from bem_pckg import BEM
 from bem_pckg import twist_chord
 from vortex_system import VortexSystem
@@ -16,10 +16,9 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     """
     Function to compute the induction for the whole rotor via BEM from the last assignment
     
-    
     :tsr:           tip speed ratio
     :pitch:
-    :wind_speed:    wind speed far upstream 
+    :wind_speed:    wind speed far upstream
     :rotor_radius:  outer radius of the blade
     root_radius:    inner radius of the blade
     :n_blades:      number of blades
@@ -29,25 +28,27 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
     """
 
     bem = BEM.BEM(data_root="../data", file_airfoil="polar.xlsx")  # initialize BEM and set some params
-    #bem.set_constants(rotor_radius=rotor_radius, root_radius=50*0.2, n_blades=3, air_density=1.225)
-    bem.set_constants(rotor_radius=rotor_radius, root_radius=root_radius, n_blades=n_blades, air_density=density)
-    resolution_bem = resolution # spanwise resolution in BEM
-    bem.solve_TUD(wind_speed=wind_speed, tip_speed_ratio=tsr, pitch=pitch, resolution=resolution_bem) 
-    #bem.solve_TUD(wind_speed=10, tip_speed_ratio=tsr, pitch=-2, resolution=resolution_bem) 
+    # bem.set_constants(rotor_radius=rotor_radius, root_radius=50*0.2, n_blades=3, air_density=1.225)
+    bem.set_constants(rotor_radius=rotor_radius, root_radius=root_radius,
+                      n_blades=n_blades, air_density=density)
+    resolution_bem = resolution  # spanwise resolution in BEM
+    bem.solve_TUD(wind_speed=wind_speed, tip_speed_ratio=tsr,
+                  pitch=pitch, resolution=resolution_bem)
+    # bem.solve_TUD(wind_speed=10, tip_speed_ratio=tsr, pitch=-2, resolution=resolution_bem)
     thrust = bem._calculate_thrust(bem.current_results.f_n, bem.current_results.r_centre)  # compute the thrust from the results via integration
-    # Now we need the thrust coefficient to get the 
+    # Now we need the thrust coefficient to get the
     rotor_area = np.pi * (rotor_radius**2 - root_radius**2)
-    C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area) # obtain corresponding thrust coefficient
+    C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area)  # obtain corresponding thrust coefficient
     # And finally we obtain the induction from solving the CT - induction equation for the induction
     # res = lambda a : 4*a *(1 -a) - C_T #
     # induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
     # induction = scipy.optimize.newton(res,0.2)
-    return 1/2*(1-np.sqrt(1-C_T)), bem.current_results  # analytical induction factor solution
+    return 1/2 * (1-np.sqrt(1-C_T)), bem.current_results  # analytical induction factor solution
 
 
-def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho : float = 1.225,
-              path_to_polar: str="../data/polar.xlsx") -> np.ndarray:
-    """ 
+def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho: float = 1.225,
+              path_to_polar: str = "../data/polar.xlsx") -> np.ndarray:
+    """
     Function to compute the lift force per unit span along the blade.
 
     Note that the inflow speed needs to include the rotation!
@@ -58,10 +59,10 @@ def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho 
     """
     polar_data = pd.read_excel(path_to_polar, skiprows=3) # read in polar data
 
-    cl_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cl"]) 
-    cd_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cd"]) 
-    cl = cl_function(np.rad2deg(aoa))# get cl along the blade
-    cd = cd_function(np.rad2deg(aoa))# get cl along the blade
+    cl_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cl"])
+    cd_function = scipy.interpolate.interp1d(polar_data["alpha"], polar_data["cd"])
+    cl = cl_function(np.rad2deg(aoa))  # get cl along the blade
+    cd = cd_function(np.rad2deg(aoa))  # get cl along the blade
     lift = 0.5*rho*chord*inflow_speed**2*cl
     return lift, cl, cd
 
@@ -118,7 +119,7 @@ def calc_forces(cl, cd, aoa, chord, length, wind_speed, density,
     f_n = coeff_to_force(c_n, wind_speed, chord, density)
     f_t = coeff_to_force(c_t, wind_speed, chord, density)
     breakpoint() 
-    #thrust = n_blades*scipy.integrate.simpson([*f_n, 0], [*radial_positions, self.rotor_radius])
+    # thrust = n_blades*scipy.integrate.simpson([*f_n, 0], [*radial_positions, self.rotor_radius])
     thrust = np.sum(f_n * length) * n_blades
     rotor_area = np.pi * (inner_radius ** 2 - outer_radius ** 2)
     C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area)  # obtain corresponding thrust coefficient
@@ -129,7 +130,7 @@ def calc_forces(cl, cd, aoa, chord, length, wind_speed, density,
 def calc_circulation(lift: np.ndarray,
                      u_inflow: float or np.ndarray,
                      old_circulation: np.ndarray,
-                     rho:float=1.225 ) -> np.ndarray:
+                     rho: float = 1.225 ) -> np.ndarray:
     """
     Compute the circulation at every control point based on Kutta-Joukowsky. Uses some under-relaxation.
 
@@ -151,7 +152,8 @@ def calc_circulation_from_cl(cl: np.array,
 
 
 def calc_velocity(u_inf: float, omega: float,
-                  radial_positions: np.ndarray, u_induced: np.ndarray, v_induced: np.ndarray ) -> dict:
+                  radial_positions: np.ndarray, u_induced: np.ndarray, 
+                  v_induced: np.ndarray) -> dict:
     """
     Compute the velocity components as the sum of far field velocity, rotation, and the induced velocity field and return a dict.
     """
@@ -166,9 +168,9 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
             disctretization="sin",
             residual_max=1e-10, n_iter_max=1000):
     
-    #--------------Get twist and chord distributions ----------------#
+    # --------------Get twist and chord distributions ----------------#
     
-    ##!!!!!!! Needs to be adapted!
+    # !!!!!!! Needs to be adapted!
     # Get the positions along the span for each element and the nodes
     # Compute discretization of the blade:
     # uniform distribution or cosine distribution
@@ -204,16 +206,16 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     u_rotor = v_0*(1-induction)
     print("BEM done")
     
-    #------------------------------------------------------#
+    # ------------------------------------------------------#
     # PART 2 - set up wake system
-    #------------------------------------------------------#
+    # ------------------------------------------------------#
     
-    #------------- Compute the wake structure ----------#
+    # ------------- Compute the wake structure ----------#
     
     # compute inputs for the wake tool:
     omega = tsr*v_0/radius
     wake_speed = u_rotor  # take the speed at the rotor or the speed far downstream? Probably at the rotor is a closer guess
-    wake_length = 1 * 2*radius # how many diameters should the wake have?
+    wake_length = 1 * 2*radius  # how many diameters should the wake have?
     resolution_wake = 50
 
     # initializy wake geometry
