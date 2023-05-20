@@ -112,13 +112,11 @@ def calc_forces(cl, cd, aoa, chord, length, wind_speed, density,
     expect aoa in degrees
     """
     # tangential force
-    breakpoint()
     phi = np.deg2rad(aoa)
     c_n = c_normal(phi, cl, cd)
     c_t = c_tangent(phi, cl, cd)
     f_n = coeff_to_force(c_n, wind_speed, chord, density)
     f_t = coeff_to_force(c_t, wind_speed, chord, density)
-    breakpoint() 
     # thrust = n_blades*scipy.integrate.simpson([*f_n, 0], [*radial_positions, self.rotor_radius])
     thrust = np.sum(f_n * length) * n_blades
     rotor_area = np.pi * (inner_radius ** 2 - outer_radius ** 2)
@@ -146,7 +144,6 @@ def calc_circulation_from_cl(cl: np.array,
                              chord: np.array,
                              a: np.array,
                              u_inf: float):
-    breakpoint()
     gamma = cl * 0.5 * chord * (1-a) * u_inf
     return gamma
 
@@ -249,8 +246,8 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     # 3.2 Create the matrices connecting the circulation and the velocity field
     print("Create induction matrices")
     # calculate the trailing induction matrices
-    trailing_mat_u, trailing_mat_v, trailing_mat_w = vortex_system.trailing_induction_matrices(vortex_core_radius=vortex_core_radius)
-    bound_mat_u, bound_mat_v, bound_mat_w = vortex_system.bound_induction_matrices(vortex_core_radius=vortex_core_radius) # calculate the bound induction matrices
+    trailing_mat_u, trailing_mat_v, trailing_mat_w = vortex_system.trailing_induction_matrices(vortex_core_radius=vortex_core_radius, vortex_system_type="rotor")
+    bound_mat_u, bound_mat_v, bound_mat_w = vortex_system.bound_induction_matrices(vortex_core_radius=vortex_core_radius, vortex_system_type="rotor") # calculate the bound induction matrices
     if debug:
         vortex_system.blade_elementwise_visualisation(control_points=True)
         # vortex_system.rotor_visualisation(control_points=True)
@@ -374,13 +371,23 @@ def task1(debug=False):
     air_density = 1.225
     tsr = 8                      # Tip speed ratios  to be calculated
     airfoil = pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
+    
+    operational_data = {
+        'v_0' : 10,                            # [m] Wind speed
+        'air_density' : 1.225,
+        'tsr' : 8,                      # Tip speed ratios  to be calculated,
+        'airfoil' : pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
+    }
 
+    #ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
+    #                     inner_radius, pitch, resolution_ll, vortex_core_radius,
+    #                     debug, wake_length, disctretization="uniform",
+    #                     residual_max=residual_max, n_iter_max=n_iter_max)
 
     ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
                          inner_radius, pitch, resolution_ll, vortex_core_radius,
                          debug, wake_length, disctretization="uniform",
                          residual_max=residual_max, n_iter_max=n_iter_max)
-
     #---------------- Plotting ----------------------#
     if debug:
         fig, axs = plt.subplots(7, 1)
@@ -454,10 +461,11 @@ def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     #plt.show()
 
 if __name__== "__main__":
-    v_0 = 10
-    outer_radius = 50
-    inner_radius = 0.2 * outer_radius
-    n_blades = 3
-    density = 1.225
-
-    compare_ll_bem(v_0, inner_radius, outer_radius, n_blades, density)
+    operational_data = {
+        "v_0": 10,
+        "outer_radius" : 50,
+        "inner_radius" : 0.2 * 50,
+        "n_blades" : 3,
+        "density" : 1.225,
+    }
+    compare_ll_bem(**operational_data)
