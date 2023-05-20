@@ -149,12 +149,17 @@ class VortexSystem:
         bound vortices between the blade element ends causes the middle of the bound vortices to NOT lie on the
         actual quarter chord point of the middle of the blade element. This is because the actual quarter chord point
         follows the proper angles while the bound vortex connection is a straight line.
+        ATTENTION 2: If a rotor array is used, this function must be called after 'set_rotor_array' if the first
+        rotor has a rotation.
         :return:
         """
+        rotor_angle = 0 if self.rotor_rotations is None else self.rotor_rotations[0]
         qc_elements = self.c_elements/4 # quarter chord of blade element ends
         x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord of blade element ends
-        y_qc = np.cos(self.blade_rotation)*qc_elements # y position of the quarter chord of blade element ends
-        coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, self.r_elements)])
+        y_qc = np.cos(self.blade_rotation)*qc_elements-np.sin(rotor_angle)*self.r_elements # y position of the
+        # quarter chord of blade element ends
+        z_qc = np.cos(rotor_angle)*self.r_elements # z position of the quarter chord of the blade ends
+        coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, z_qc)])
         # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends,
         # i.e. on the bound vortex in the radial middle of the element.
         self.control_points = (coordinates_ends[:-1]+coordinates_ends[1:])/2
@@ -229,7 +234,7 @@ class VortexSystem:
 
     def bound_induction_matrices(self,
                                  vortex_core_radius: float,
-                                 vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                                 vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from bound vortices of the 'vortex_sytem_type' on all control points.
         :return: tuple with the induction matrices which are numpy arrays
@@ -237,6 +242,9 @@ class VortexSystem:
         :param vortex_system_type: Which vortex system to use. Valid choices are: "blade", "rotor", and "rotor_array"
         :return:
         """
+        if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
+                             f"{vortex_system_type}.")
         self._assert_vortex_system(vortex_system_type) # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_array_bound_rotorwise
         if vortex_system_type == "rotor":
@@ -275,11 +283,14 @@ class VortexSystem:
 
     def trailing_induction_matrices(self,
                                     vortex_core_radius: float,
-                                    vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                                    vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from the wake of the rotor on all control points.
         :return: tuple with the induction matrices for u, v and w
         """
+        if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
+                             f"{vortex_system_type}.")
         self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_array_trailing_rotorwise
         if vortex_system_type == "rotor":
