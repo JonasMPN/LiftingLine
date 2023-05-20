@@ -229,7 +229,7 @@ class VortexSystem:
 
     def bound_induction_matrices(self,
                                  vortex_core_radius: float,
-                                 vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                                 vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from bound vortices of the 'vortex_sytem_type' on all control points.
         :return: tuple with the induction matrices which are numpy arrays
@@ -237,6 +237,8 @@ class VortexSystem:
         :param vortex_system_type: Which vortex system to use. Valid choices are: "blade", "rotor", and "rotor_array"
         :return:
         """
+        if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']")
         self._assert_vortex_system(vortex_system_type) # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_array_bound_rotorwise
         if vortex_system_type == "rotor":
@@ -275,11 +277,13 @@ class VortexSystem:
 
     def trailing_induction_matrices(self,
                                     vortex_core_radius: float,
-                                    vortex_system_type: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                                    vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Calculates the induction matrix from the wake of the rotor on all control points.
         :return: tuple with the induction matrices for u, v and w
         """
+        if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']")
         self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_array_trailing_rotorwise
         if vortex_system_type == "rotor":
