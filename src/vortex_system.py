@@ -238,7 +238,8 @@ class VortexSystem:
         :return:
         """
         if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
-            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']")
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
+                             f"{vortex_system_type}.")
         self._assert_vortex_system(vortex_system_type) # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_array_bound_rotorwise
         if vortex_system_type == "rotor":
@@ -283,7 +284,8 @@ class VortexSystem:
         :return: tuple with the induction matrices for u, v and w
         """
         if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
-            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']")
+            raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
+                             f"{vortex_system_type}.")
         self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
         coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_array_trailing_rotorwise
         if vortex_system_type == "rotor":
