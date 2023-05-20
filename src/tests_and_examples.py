@@ -5,35 +5,46 @@ from helper_functions import Helper
 helper = Helper()
 
 test = {
-    "wake_visualisation": True,
+    "wake_visualisation": False,
     "induction_matrix": False,
-    "lifting_line": False
+    "lifting_line": True
 }
 
 if test["wake_visualisation"]:
     # initialize and empty vortex system object
     vortex_system = VortexSystem()
     # set properties of the blade: elmeents, chord per element, pitch/twist angle, rotor speed, number of blades
-    vortex_system.set_blade(0.2+np.linspace(0,1,5), np.linspace(0, 0.2, 5)[::-1], blade_rotation=-0*np.pi/2,
-                            rotor_rotation_speed=np.pi/4, n_blades=3)
+    vortex_system.set_blade(0.2+np.linspace(0,1,7), np.linspace(0, 0.2, 7)[::-1],
+                            blade_rotation=-0,
+                            rotor_rotation_speed=np.pi/4, n_blades=1)
     # set parameters of the wake: convection speed, length of the wake in downstream direction, and a resolution (along the blade or along the trailing vortex) 
-    vortex_system.set_wake(wake_speed=0.5, wake_length=5, resolution=50)
+    vortex_system.set_wake(wake_speed=0.5, wake_length=10, resolution=50)
     # vortex_system.blade()
+    axes_positions = [
+        [0, 0, 0],
+        [0, 3, 0],
+        [0, 0, 3]
+    ]
+    rotations = [0, np.pi, 3*np.pi/4]
+    vortex_system.set_rotor_array(axes_positions, rotations)
    
     # Create the vortex lines (trailing and bound) calling the rotor function, which calls the trailing and bound vortex line creation functions, that themselve call the abstract _rotate_combined function
     # The _rotate combined function in usual operation calls a function to compute the vortex line ( another layer of an abstracted function)
     # Last layer is then _blade_trailing_elementwise. This is where the coordinates are actually calculated
     # the trailing / bound vortex, then creates rotated versions of it for every blade and then appends these to the coordinate object (list, dict, np array???)
-    vortex_system.rotor()
+
+    vortex_system.rotor_array()
     # at this point the structures containing the wake geometry are finished
-    breakpoint()
+    # breakpoint()
     vortex_system.set_control_points(x_control_points=0,
                                      y_control_points=0.25*np.linspace(0, 0.2, 5)[::-1], # [::-1] reverses the order
                                      z_control_points=0.2+np.linspace(0,1,5))
     # This is now only plotting
-    vortex_system.blade_elementwise_visualisation(control_points=True)
-    vortex_system.rotor_visualisation(control_points=True)
-
+    # vortex_system.blade_elementwise_visualisation(control_points=False)
+    # vortex_system.rotor_visualisation(control_points=True)
+    fig, ax = vortex_system.rotor_array_visualisation(control_points=True, show=False)
+    ax.set_box_aspect([1, 1, 1])
+    plt.show()
 
 if test["induction_matrix"]:
     vortex_system = VortexSystem()
@@ -45,7 +56,7 @@ if test["induction_matrix"]:
     vortex_system.set_control_points(x_control_points=0.25,
                                      y_control_points=0,
                                      z_control_points=0.2+np.linspace(0,1,5))
-    t_ind_u, t_ind_v, t_ind_w = vortex_system.trailing_induction_matrices()
+    t_ind_u, t_ind_v, t_ind_w = vortex_system.trailing_induction_matrices(0.1)
     print("Trailing induction")
     print("x", "\n", t_ind_u)
     print("y", "\n", t_ind_v)
@@ -85,8 +96,11 @@ if test["lifting_line"]:
     # helper.handle_axis(ax, x_label="x", y_label="y", y_lim=(0,1), grid=True) # visual modifications
     # plt.show() # uncomment above three lines to show the plot
 
-    t_ind_u, t_ind_v, t_ind_w = vortex_system.trailing_induction_matrices() # calculate the trailing induction matrices
-    b_ind_u, b_ind_v, b_ind_w = vortex_system.bound_induction_matrices() # calculate the bound induction matrices
+    t_ind_u, t_ind_v, t_ind_w = vortex_system.trailing_induction_matrices(0.1, "blade") # calculate the trailing
+    # induction
+    # matrices
+    b_ind_u, b_ind_v, b_ind_w = vortex_system.bound_induction_matrices(0.1, "blade") # calculate the bound induction
+    # matrices
 
     # flat plate
     def lift(aoa, inflow_mag): return np.pi*inflow_mag**2*np.sin(np.deg2rad(aoa)) # mind density=1, chord=1
