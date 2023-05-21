@@ -121,10 +121,27 @@ class VortexSystem:
         self.rotor_set = True
         return None
 
-    def set_rotor_array(self, rotor_positions: list[list] or list[np.ndarray], rotor_rotations: list or np.ndarray):
+    def set_rotor_array(self,
+                        rotor_positions: list[list] or list[np.ndarray],
+                        rotor_rotations: list or np.ndarray) -> None:
+        """
+        Sets the parameters of the rotor array. 'Rotor array' is an umbrella term for wind farms if the rotors are
+        wind turbines, and for distributed propulsion if they are aircraft propellers. The number of elements the
+        lists of 'rotor_positions' and 'rotor_rotations' have is the number of rotors that are created.
+        :param rotor_positions: A list of points at which the rotor centre of each rotor is. Each point has three
+                                coordinates.
+        :param rotor_rotations: A list of the rotor rotations which define the position of the blades with respect to
+                                the rotor axes. Check /documentation/VortexSystem.pdf for the angle definitions.
+        :return:
+        """
+        if len(rotor_positions) != len(rotor_rotations):
+            raise ValueError(f"'rotor_positions' suggest a different number of rotors ({len(rotor_positions)}) than "
+                             f"'rotor_rotations' does ({len(rotor_rotations)}). Both must be the same.")
+        # change type to be np.ndarray if it's not already
         self.rotor_positions = self._list_to_ndarray(*rotor_positions)
         self.rotor_rotations, = self._list_to_ndarray(rotor_rotations)
         self.rotor_array_set = True
+        return None
 
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
@@ -186,7 +203,8 @@ class VortexSystem:
         n_y = 1 if type(y_control_points) == float or type(y_control_points) == int else y_control_points.size
         n_z = 1 if type(z_control_points) == float or type(z_control_points) == int else z_control_points.size
         lengths = np.asarray([n_x, n_y, n_z])
-        if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions match
+        if np.unique(lengths).size > 2 or (np.unique(lengths).size > 1 and 1 not in lengths): # check if dimensions
+            # match
             raise ValueError(f"Number of coordinates for the control points don't match. Input lengths are [n_x n_y "
                              f"n_z] = {lengths}")
 
@@ -203,11 +221,11 @@ class VortexSystem:
         bound vortex system.
         :return: None
         """
-        self._assert_properties("blade", self.blade)
-        self._blade_bound()
-        self._assert_properties("wake", self.blade)
-        self._blade_trailing()
-        self.blade_calculated = True
+        self._assert_properties("blade", self.blade) # assert that the blade properties have been set
+        self._blade_bound()                          # calculate the bound vortex coordinates for the blade
+        self._assert_properties("wake", self.blade)  # assert that the wake properties have been set
+        self._blade_trailing()                       # calculate the trailing vortex coordinates for the blade
+        self.blade_calculated = True                 # for later error clarification
         return None
 
     def rotor(self) -> None:
@@ -216,62 +234,77 @@ class VortexSystem:
         bound vortex system.
         :return:
         """
-        self._assert_properties("blade", self.rotor)
-        self._rotor_bound()
-        self._assert_properties("wake", self.rotor)
-        self._rotor_trailing()
-        self.rotor_calculated = True
+        self._assert_properties("blade", self.rotor) # assert that the blade properties have been set
+        self._rotor_bound()                          # calculate the bound vortex coordinates for the rotor
+        self._assert_properties("wake", self.rotor)  # assert that the wake properties have been set
+        self._rotor_trailing()                       # calculate the trailing vortex coordinates for the rotor
+        self.rotor_calculated = True                 # for later error clarification
         return None
 
     def rotor_array(self) -> None:
-        self._assert_properties("array", self.rotor_array)
-        self._assert_properties("blade", self.rotor_array)
-        self._rotor_array_bound(self.rotor_positions, self.rotor_rotations)
-        self._assert_properties("wake", self.rotor_array)
-        self._rotor_array_trailing(self.rotor_positions, self.rotor_rotations)
-        self.rotor_array_calculated = True
+        self._assert_properties("array", self.rotor_array) # assert that the rotor array properties are defined
+        self._assert_properties("blade", self.rotor_array) # assert that the blade properties are defined
+        self._rotor_array_bound(self.rotor_positions, self.rotor_rotations) # calculate the bound vortex coordinates
+        # of the rotor array
+        self._assert_properties("wake", self.rotor_array) # assert that the wake properties are defined
+        self._rotor_array_trailing(self.rotor_positions, self.rotor_rotations) # calculate the trailing vortex
+        # coordinates of the rotor array
+        self.rotor_array_calculated = True # for later error clarification
         return None
 
     def bound_induction_matrices(self,
                                  vortex_core_radius: float,
                                  vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Calculates the induction matrix from bound vortices of the 'vortex_sytem_type' on all control points.
+        Calculates the induction matrix from bound vortices of the 'vortex_sytem_type' on all control points. The
+        columns of the induction matrices correspond to a certain circulation, while the rows correspond to a certain
+        control point. In general: the entry (i,j) (row, column) of an induction matrix calculates (with a given
+        circulation vector) the induced velocity of circulation 'j' on control point 'i'.
         :return: tuple with the induction matrices which are numpy arrays
         :param vortex_core_radius: Radius of the vortex core
         :param vortex_system_type: Which vortex system to use. Valid choices are: "blade", "rotor", and "rotor_array"
-        :return:
+        :return: induction matrices (numpy arrays) in the three axes directions given as a tuple.
         """
         if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
             raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
                              f"{vortex_system_type}.")
-        self._assert_vortex_system(vortex_system_type) # assert that the needed vortex coordinates have been calculated
+        self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
+
+        # The later calculation of the induction factors always assumes a calculated rotor array. However,
+        # if no rotor array has been calculated then a rotor array is artificially created. If, e.g.,
+        # only the vortex system of a blade was calculated and shall be examined, then the following lines create a
+        # rotor array that consists only of that blade's vortex system.
         coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_array_bound_rotorwise
         if vortex_system_type == "rotor":
-            coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_bound_bladewise
+            coordinates_rotor_array_bound_rotorwise = self.coordinates_rotor_bound_bladewise  # only use one rotor
         elif vortex_system_type == "blade":
-            coordinates_rotor_array_bound_rotorwise = [self.coordinates_blade_bound]
+            coordinates_rotor_array_bound_rotorwise = [self.coordinates_blade_bound]  # only use the blade
 
-        n_circulations = len(self.r_elements)-1
-        n_rotors = len(coordinates_rotor_array_bound_rotorwise)
+        n_circulations = len(self.r_elements)-1  # number of bound circulations
+        n_rotors = len(coordinates_rotor_array_bound_rotorwise)  # number of rotors in the rotor array
         single_trailing_induction_matrices = {  # the inductions are calculated for individual bound vortex systems
             # first (debugging help)
             "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
             "y": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
             "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)]
         }
-        for i_rotor, rotor_bound in enumerate(coordinates_rotor_array_bound_rotorwise):
-            for i_blade in range(self.n_blades):
-                i_bound_system = i_rotor*self.n_blades+i_blade
-                blade_bound = rotor_bound[i_blade*n_circulations:(i_blade+1)*n_circulations, :]
-                for cp_i, control_point in enumerate(self.control_points):
+        for i_rotor, rotor_bound in enumerate(coordinates_rotor_array_bound_rotorwise):  # every rotor
+            for i_blade in range(self.n_blades):  # every blade of the current rotor
+                i_bound_system = i_rotor*self.n_blades+i_blade  # number of the current bound vortex system
+                blade_bound = rotor_bound[i_blade*n_circulations:(i_blade+1)*n_circulations, :]  # coordinates of the
+                # current bound vortex system
+                for cp_i, control_point in enumerate(self.control_points):  # every control point
                     for vortex_i, (vortex_start, vortex_end) in enumerate(zip(blade_bound[:-1], blade_bound[1:])):
-                        induction_factors = self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
+                        # go over each vortex filament of the bound vortices.
+                        induction_factors = self._vortex_induction_factor(vortex_start,
+                                                                          vortex_end,
+                                                                          control_point,
+                                                                          vortex_core_radius)
                         single_trailing_induction_matrices["x"][i_bound_system][cp_i, vortex_i] = induction_factors[0]
                         single_trailing_induction_matrices["y"][i_bound_system][cp_i, vortex_i] = induction_factors[1]
                         single_trailing_induction_matrices["z"][i_bound_system][cp_i, vortex_i] = induction_factors[2]
 
-        induction_matrices = {  # initialise container for the final, summed together induction factor matrices
+        induction_matrices = {  # initialise container for the final, summed up induction factor matrices
             "x": np.zeros((self.n_control_points, n_circulations)),
             "y": np.zeros((self.n_control_points, n_circulations)),
             "z": np.zeros((self.n_control_points, n_circulations))
@@ -285,13 +318,24 @@ class VortexSystem:
                                     vortex_core_radius: float,
                                     vortex_system_type: str="rotor_array") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Calculates the induction matrix from the wake of the rotor on all control points.
-        :return: tuple with the induction matrices for u, v and w
+        Calculates the induction matrix from trailing vortices of the 'vortex_sytem_type' on all control points. The
+        columns of the induction matrices correspond to a certain circulation, while the rows correspond to a certain
+        control point. In general: the entry (i,j) (row, column) of an induction matrix calculates (with a given
+        circulation vector) the induced velocity of circulation 'j' on control point 'i'.
+        :return: tuple with the induction matrices which are numpy arrays
+        :param vortex_core_radius: Radius of the vortex core
+        :param vortex_system_type: Which vortex system to use. Valid choices are: "blade", "rotor", and "rotor_array"
+        :return: induction matrices (numpy arrays) in the three axes directions given as a tuple.
         """
         if vortex_system_type not in ["rotor_array", "rotor", "blade"]:
             raise ValueError(f"Supported vortex system types are ['rotor_array', 'rotor', 'blade']. You tried it with "
                              f"{vortex_system_type}.")
         self._assert_vortex_system(vortex_system_type)  # assert that the needed vortex coordinates have been calculated
+
+        # The later calculation of the induction factors always assumes a calculated rotor array. However,
+        # if no rotor array has been calculated then a rotor array is artificially created. If, e.g.,
+        # only the vortex system of a blade was calculated and shall be examined, then the following lines create a
+        # rotor array that consists only of that blade's vortex system.
         coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_array_trailing_rotorwise
         if vortex_system_type == "rotor":
             coordinates_rotor_array_trailing_rotorwise = self.coordinates_rotor_trailing_bladewise
@@ -300,7 +344,7 @@ class VortexSystem:
 
         n_circulations = len(self.r_elements) # because at each blade element a vortex line is shed (which has a
         # constant circulation!)
-        n_rotors = len(coordinates_rotor_array_trailing_rotorwise)
+        n_rotors = len(coordinates_rotor_array_trailing_rotorwise) # number of rotors in the array
         single_trailing_induction_matrices = { # the inductions are calculated for individual trailing vortex systems
             # first (debugging help)
             "x": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)],
@@ -308,23 +352,32 @@ class VortexSystem:
             "z": [np.zeros((self.n_control_points, n_circulations)) for _ in range(self.n_blades*n_rotors)]
         }
 
-        for i_rotor, rotor_trailing in enumerate(coordinates_rotor_array_trailing_rotorwise):
-            for i_blade in range(self.n_blades):
-                i_wake_system = i_rotor*self.n_blades+i_blade
-                n_coords_per_blade = n_circulations*(self.resolution+1)
+        for i_rotor, rotor_trailing in enumerate(coordinates_rotor_array_trailing_rotorwise):  # every rotor
+            for i_blade in range(self.n_blades):  # every blade
+                i_wake_system = i_rotor*self.n_blades+i_blade  # number of the current trailing vortex system
+                n_coords_per_blade = n_circulations*(self.resolution+1)  # number of the trailing vortex coordinates
+                # per blade
                 blade_trailing = rotor_trailing[i_blade*n_coords_per_blade:(i_blade+1)*n_coords_per_blade, :]
+                # all trailing vortex coordinates that belong to the current blade
                 for cp_i, control_point in enumerate(self.control_points): # iterate over the control points
-                    for inducing_element in range(len(self.r_elements)): # iterate over the trailing vortex of each blade
-                        # element. Every blade element thus influences (thus inducing_element) the current element (which
-                        # is therefore called induced_element, because it 'receives' an induced velocity)
+                    for inducing_element in range(n_circulations): # iterate over the trailing vortex of each blade
+                        # element. Every blade element thus influences (thus inducing_element) the current element
 
-                        # get the start points of each vortex element of the trailing vortex from the inducing blade element
-                        vortex_starts = blade_trailing[inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)-1]
-                        # get the end points of each vortex element of the trailing vortex from the inducing blade element
-                        vortex_ends = blade_trailing[1+inducing_element*(self.resolution+1):(inducing_element+1)*(self.resolution+1)]
+                        # get the start points of each vortex element of the trailing vortex from the inducing blade
+                        # element
+                        vortex_starts = blade_trailing[inducing_element*(self.resolution+1):
+                                                       (inducing_element+1)*(self.resolution+1)-1]
+                        # get the end points of each vortex element of the trailing vortex from the inducing blade
+                        # element
+                        vortex_ends = blade_trailing[1+inducing_element*(self.resolution+1):
+                                                     (inducing_element+1)*(self.resolution+1)]
                         induction_factors = np.zeros(3)
-                        for vortex_start, vortex_end in zip(vortex_starts, vortex_ends): # iterate over all vortex elements
-                            induction_factors += self._vortex_induction_factor(vortex_start, vortex_end, control_point, vortex_core_radius)
+                        for vortex_start, vortex_end in zip(vortex_starts, vortex_ends):  # iterate over all vortex
+                            # elements
+                            induction_factors += self._vortex_induction_factor(vortex_start,
+                                                                               vortex_end,
+                                                                               control_point,
+                                                                               vortex_core_radius)
                         # place the induction factors (x, y, and z component) of this wake in its respective wake
                         # induction matrix
                         single_trailing_induction_matrices["x"][i_wake_system][cp_i, inducing_element] = induction_factors[0]
@@ -389,8 +442,6 @@ class VortexSystem:
                             show: bool=True) -> None or tuple[plt.figure, plt.axes]:
         """
         Visualises the wake of the whole rotor. Currently supports a maximum of 7 wakes (due to colouring).
-        Control points can be given as an input to be visualised as well. Their structure needs to be the same as the
-        control points have that are output by 'induction_matrices()', meaning a list of arrays of size 3.
         :param trailing: Visualise the trailing vortices
         :param bound: Visualise the bound vortices
         :param control_points: Visualise the control points
@@ -434,6 +485,14 @@ class VortexSystem:
                                   bound: bool=True,
                                   control_points: bool=False,
                                   show: bool=True) -> None or tuple[plt.figure, plt.axes]:
+        """
+        Visualises the wake of the whole rotor array. Currently supports a maximum of 7 rotors (due to colouring).
+        :param trailing: Visualise the trailing vortices
+        :param bound: Visualise the bound vortices
+        :param control_points: Visualise the control points
+        :param show: whether to show the plot. If False, the pyplot figure and axis are returned.
+        :return:
+        """
         fig = plt.figure()
         ax = fig.add_subplot(projection="3d")
         colours = ["b", "g", "r", "c", "m", "y", "k"]
@@ -587,7 +646,7 @@ class VortexSystem:
             rot_matrix = np.array([[1, 0, 0], # calculate rotation matrix for the current blade
                                    [0, np.cos(rotation), np.sin(rotation)],
                                    [0, -np.sin(rotation), np.cos(rotation)]])
-            self.__dict__[combine_to].append(np.dot(coordinates, rot_matrix)+position)
+            self.__dict__[combine_to].append(np.dot(coordinates, rot_matrix)+position)  # and shift to proper position
         return None
 
     def _blade_bound(self) -> np.ndarray:
