@@ -92,28 +92,31 @@ class Helper():
         This function does a shit ton for convenience (which also means perhaps something against your will). Most
         things should be straight forward (such as line_width and font_size), some will be explained in a second,
         the rest is probably not needed for our plots.
+
         How to use 'title', 'x_label', and 'y_label': Use a single string if every axis should get the same string.
         Use ['example_string'] if only the first axis should get the string. Use ['string_1', 'string_2',
         ...] if every axis should get a different string. If you want skip an axis, use None (not as string)
         The same principle holds for 'grid' (just with boolean values instead of strings).
         If there's issues text me (Jonas).
-        @param axis:
-        @param title:
-        @param grid:
-        @param legend:
-        @param legend_loc:
-        @param legend_columns:
-        @param x_label:
-        @param y_label:
-        @param z_label:
-        @param x_scale:
-        @param y_scale:
-        @param x_lim:
-        @param y_lim:
-        @param font_size:
-        @param line_width:
-        @param label_pad:
-        @return:
+
+        :param axis:
+        :param title:
+        :param grid:
+        :param legend:
+        :param legend_loc:
+        :param legend_columns:
+        :param legend_together:
+        :param x_label:
+        :param y_label:
+        :param z_label:
+        :param x_scale:
+        :param y_scale:
+        :param x_lim:
+        :param y_lim:
+        :param font_size:
+        :param line_width:
+        :param label_pad:
+        :return:
         """
         if type(axis) == matplotlib.pyplot.axis:
             axis, shape = [axis], None
