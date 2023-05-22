@@ -8,7 +8,6 @@ from bem_pckg.helper_functions import Helper  # problem -> different versions of
 from bem_pckg import BEM
 from bem_pckg import twist_chord
 from vortex_system import VortexSystem
-import task1
 helper = Helper()
 
 
@@ -29,20 +28,12 @@ def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius
 
     bem = BEM.BEM(data_root="../data", file_airfoil="polar.xlsx")  # initialize BEM and set some params
     # bem.set_constants(rotor_radius=rotor_radius, root_radius=50*0.2, n_blades=3, air_density=1.225)
-    bem.set_constants(rotor_radius=rotor_radius, root_radius=root_radius,
-                      n_blades=n_blades, air_density=density)
-    resolution_bem = resolution  # spanwise resolution in BEM
-    bem.solve_TUD(wind_speed=wind_speed, tip_speed_ratio=tsr,
-                  pitch=pitch, resolution=resolution_bem)
-    # bem.solve_TUD(wind_speed=10, tip_speed_ratio=tsr, pitch=-2, resolution=resolution_bem)
+    bem.set_constants(rotor_radius=rotor_radius, root_radius=root_radius, n_blades=n_blades, air_density=density)
+    bem.solve_TUD(wind_speed=wind_speed, tip_speed_ratio=tsr, pitch=pitch, resolution=resolution)
     thrust = bem._calculate_thrust(bem.current_results.f_n, bem.current_results.r_centre)  # compute the thrust from the results via integration
     # Now we need the thrust coefficient to get the
     rotor_area = np.pi * (rotor_radius**2 - root_radius**2)
     C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area)  # obtain corresponding thrust coefficient
-    # And finally we obtain the induction from solving the CT - induction equation for the induction
-    # res = lambda a : 4*a *(1 -a) - C_T #
-    # induction = scipy.optimize.minimize(res,0.2,method ='TNC', bounds=(0,0.4))
-    # induction = scipy.optimize.newton(res,0.2)
     return 1/2 * (1-np.sqrt(1-C_T)), bem.current_results  # analytical induction factor solution
 
 
@@ -69,7 +60,9 @@ def calc_lift(aoa: np.ndarray, chord: np.ndarray, inflow_speed: np.ndarray, rho:
 
 def c_normal(phi: float, c_lift: float, c_drag: float) -> float:
     """
-    Calculates an aerodynamic "lift" coefficient according to a coordinate transformation with phi
+    Calculates an aerodynamic "lift" coefficient according to a coordinate transformation with phi. Check
+    /documentation/VortexSystem.pdf of the vortex system for the right angles.
+
     :param phi: angle between flow and rotational direction in rad
     :param c_lift: lift coefficient old coordinate system
     :param c_drag: lift coefficient old coordinate system
@@ -80,7 +73,9 @@ def c_normal(phi: float, c_lift: float, c_drag: float) -> float:
 
 def c_tangent(phi: float, c_lift: float, c_drag: float) -> float:
     """
-    Calculates an aerodynamic "drag" coefficient according to a coordinate transformation with phi
+    Calculates an aerodynamic "drag" coefficient according to a coordinate transformation with phi. Check
+    /documentation/VortexSystem.pdf of the vortex system for the right angles.
+
     :param phi: angle between flow and rotational direction in rad
     :param c_lift: lift coefficient old coordinate system
     :param c_drag: lift coefficient old coordinate system
@@ -105,25 +100,25 @@ def force_to_coeff(force, wind_speed, chord, density):
     return coeff
 
 
-def calc_forces(cl, cd, aoa, chord, length, wind_speed, density,
+def calc_forces(cl, cd, phi, chord, length, inflow_speeds, density,
                 inner_radius, outer_radius, n_blades):
     """
     Compute the axial and tangential forces as well as thrust and the coefficient
     expect aoa in degrees
     """
     # tangential force
-    phi = np.deg2rad(aoa)
     c_n = c_normal(phi, cl, cd)
     c_t = c_tangent(phi, cl, cd)
-    f_n = coeff_to_force(c_n, wind_speed, chord, density)
-    f_t = coeff_to_force(c_t, wind_speed, chord, density)
+    f_n = coeff_to_force(c_n, inflow_speeds, chord, density)
+    f_t = coeff_to_force(c_t, inflow_speeds, chord, density)
     # thrust = n_blades*scipy.integrate.simpson([*f_n, 0], [*radial_positions, self.rotor_radius])
     thrust = np.sum(f_n * length) * n_blades
     rotor_area = np.pi * (inner_radius ** 2 - outer_radius ** 2)
-    C_T = thrust/(1/2 * density * wind_speed**2 * rotor_area)  # obtain corresponding thrust coefficient
+    C_T = thrust/(1/2 * density * inflow_speeds**2 * rotor_area)  # obtain corresponding thrust coefficient
 
     forces = {"f_t":f_t, "f_n":f_n, "thrust": thrust, "thrust_coeff": C_T}
     return forces
+
 
 def calc_circulation(lift: np.ndarray,
                      u_inflow: float or np.ndarray,
@@ -160,7 +155,7 @@ def calc_velocity(u_inf: float, omega: float,
     return {"u": u, "v": v, "magnitude": velocity_magnitude}  # return a dict!
 
 
-def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
+def calc_ll(v_0, air_density, tsr, radius, n_blades, inner_radius,
             pitch, resolution_ll, vortex_core_radius, debug, wake_length,
             disctretization="sin",
             residual_max=1e-10, n_iter_max=1000, wake_speed='from_BEM', resolution_wake=50):
@@ -173,11 +168,12 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     # uniform distribution or cosine distribution
 
     if disctretization =="uniform":
-        radii_ends = np.linspace(inner_radius, radius, resolution_ll) # radial positions of the ends of each section (uniform)
+        radii_ends = np.linspace(inner_radius, radius, resolution_ll) # radial positions of the ends of each section
+    # (uniform)
         
     else:
         radii_ends = (np.sin(np.linspace(-np.pi/2, np.pi/2, resolution_ll))/2+0.5)*(radius-inner_radius)+inner_radius # sine
-    element_length = [ radii_ends[i+1] - radii_ends[i] for i in range(len(radii_ends)-1)]
+    element_length = radii_ends[1:]-radii_ends[:-1]
     # distribution
 
     # M: changed chord and twist to the edges of an element.... if that really makes sense needs to be discussed
@@ -330,16 +326,24 @@ def calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades, inner_radius,
     axial_induction = - u_induced / v_0 
     a_prime = v_induced / (omega * radii_centre)  
 
-    ll_results = {"r_centre": radii_centre, "element_length":element_length,
-                  "chord":chord_centre, "twist":twist_centre,
-                  "u_induced": u_induced, "lift": lift,
-                  "cl": cl, "cd": cd_current,
-                  "a": axial_induction, "a_prime": a_prime,
+    ll_results = {"r_centre": radii_centre,
+                  "element_length":element_length,
+                  "chord":chord_centre,
+                  "twist":twist_centre,
+                  "u_induced": u_induced,
+                  "lift": lift,
+                  "cl": cl,
+                  "cd": cd_current,
+                  "a": axial_induction,
+                  "a_prime": a_prime,
                   "aoa":np.rad2deg(effective_aoa),
+                  "phi": effective_aoa-(pitch+twist_centre),
                   "bound_circulation":bound_circulation,
+                  "inflow_speed": inflow_velocity["magnitude"],
                   "bem_results": bem_results}
 
     return ll_results
+
 
 def task1(debug=False):
     """
@@ -350,10 +354,10 @@ def task1(debug=False):
     - set up the wake accordingly
     - create the matrix system for the geometrical induction via the vortices
     - solve for circulation iteratively
-    
+
     step 4 needs debugging
     """
-    
+
     #------------ Get all the inputs -------------#
     radius = 50                         # radius of the rotor
     n_blades = 3                        # number of blades
@@ -365,13 +369,13 @@ def task1(debug=False):
     n_iter_max = 1000
     vortex_core_radius = 1
     wake_length = 1 * 2 * radius
-    
+
     #------------ Operational data ---------------#
     v_0 = 10                            # [m] Wind speed
     air_density = 1.225
     tsr = 8                      # Tip speed ratios  to be calculated
     airfoil = pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
-    
+
     operational_data = {
         'v_0' : 10,                            # [m] Wind speed
         'air_density' : 1.225,
@@ -384,32 +388,33 @@ def task1(debug=False):
     #                     debug, wake_length, disctretization="uniform",
     #                     residual_max=residual_max, n_iter_max=n_iter_max)
 
-    ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
+    ll_results = calc_ll(v_0, air_density, tsr, radius, n_blades,
                          inner_radius, pitch, resolution_ll, vortex_core_radius,
                          debug, wake_length, disctretization="uniform",
                          residual_max=residual_max, n_iter_max=n_iter_max)
     #---------------- Plotting ----------------------#
-    if debug:
-        fig, axs = plt.subplots(7, 1)
-        axs[0].plot(radii_centre, bound_circulation, "x")
-        axs[1].plot(radii_ends, trailing_circulation)
-        axs[2].plot(radii_centre, cl)
-        axs[3].plot(radii_centre, u_induced)
-        axs[4].plot(radii_centre, v_induced)
-        axs[5].plot(radii_centre, u_induced/v_0)
-        axs[6].plot(radii_centre, v_induced / (omega * radii_centre))
-        axs[2].plot(bem_results.r_centre, bem_results.c_l)
-        helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
-                           font_size=12, y_label=["bound\ncirculation", "trailing\ncirculation",
-                                    "Cl", "u induced", "v induced", "induction", "a'"])
-        helper.handle_figure(fig, show=True, size=(6, 12))
-        
-        plt.figure(2)
-        plt.plot(radii_centre, cl)
-        plt.plot(bem_results.r_centre, bem_results.c_l)
-        plt.ylim([0,1.5])
-        plt.show()
+    # if debug:
+    #     fig, axs = plt.subplots(7, 1)
+    #     axs[0].plot(radii_centre, bound_circulation, "x")
+    #     axs[1].plot(radii_ends, trailing_circulation)
+    #     axs[2].plot(radii_centre, cl)
+    #     axs[3].plot(radii_centre, u_induced)
+    #     axs[4].plot(radii_centre, v_induced)
+    #     axs[5].plot(radii_centre, u_induced/v_0)
+    #     axs[6].plot(radii_centre, v_induced / (omega * radii_centre))
+    #     axs[2].plot(bem_results.r_centre, bem_results.c_l)
+    #     helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
+    #                        font_size=12, y_label=["bound\ncirculation", "trailing\ncirculation",
+    #                                 "Cl", "u induced", "v induced", "induction", "a'"])
+    #     helper.handle_figure(fig, show=True, size=(6, 12))
+    #
+    #     plt.figure(2)
+    #     plt.plot(radii_centre, cl)
+    #     plt.plot(bem_results.r_centre, bem_results.c_l)
+    #     plt.ylim([0,1.5])
+    #     plt.show()
     return ll_results
+
 
 def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     """
@@ -417,50 +422,52 @@ def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     This function is intended to be purely plotting
     """
     results = task1(debug=False)
-    forces = calc_forces(results["cl"], results["cd"], results["aoa"],
+    forces = calc_forces(results["cl"], results["cd"], results["phi"],
                          results["chord"], results["element_length"],
-                         v_0, density, inner_radius, outer_radius, n_blades)
+                         results["inflow_speed"], density, inner_radius, outer_radius, n_blades)
     print(forces["thrust"])
     print(forces["thrust_coeff"])
-          #\nThe thrust coeff is:{forces["thrust_coefficient"]}")
-    fig, axs = plt.subplots(7, 1)
-    
+
+    fig, axs = plt.subplots(4, 2)
     # CL
-    axs[0].plot(results["r_centre"], results["cl"])
-    axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_l"])
+    axs[0, 0].plot(results["r_centre"], results["cl"], label="lifting line")
+    axs[0, 0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_l"], label="BEM")
    
     # Cd
-    axs[1].plot(results["r_centre"], results["cd"])
-    axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_d"])
+    axs[1, 0].plot(results["r_centre"], results["cd"])
+    axs[1, 0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_d"])
     # induction 
-    axs[2].plot(results["r_centre"], results["a"])
-    axs[2].plot(results["bem_results"]["r_centre"], results["bem_results"]["a"])
+    axs[2, 0].plot(results["r_centre"], results["a"])
+    axs[2, 0].plot(results["bem_results"]["r_centre"], results["bem_results"]["a"])
     
     # a prime
-    axs[3].plot(results["r_centre"], results["a_prime"])
-    axs[3].plot(results["bem_results"]["r_centre"], results["bem_results"]["a_prime"])
+    axs[3, 0].plot(results["r_centre"], results["a_prime"])
+    axs[3, 0].plot(results["bem_results"]["r_centre"], results["bem_results"]["a_prime"])
     
     #aoa 
-    axs[4].plot(results["r_centre"], results["aoa"])
-    axs[4].plot(results["bem_results"]["r_centre"], results["bem_results"]["alpha"])
+    axs[0, 1].plot(results["r_centre"], results["aoa"])
+    axs[0, 1].plot(results["bem_results"]["r_centre"], results["bem_results"]["alpha"])
     
     # circulation
-    axs[5].plot(results["r_centre"], results["bound_circulation"])
-    axs[5].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
+    axs[1, 1].plot(results["r_centre"], results["bound_circulation"])
+    axs[1, 1].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
 
-    # Forces
-    axs[6].plot(results["r_centre"], forces["f_n"])
-    axs[6].plot(results["r_centre"], results["lift"])
-    #axs[7].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"])
+    # normal forces
+    axs[2, 1].plot(results["r_centre"], forces["f_n"])
+    axs[2, 1].plot(results["bem_results"]["r_centre"], results["bem_results"]["f_n"])
+
+    # tangential forces
+    axs[3, 1].plot(results["r_centre"], forces["f_t"])
+    axs[3, 1].plot(results["bem_results"]["r_centre"], results["bem_results"]["f_t"])
     # make plots look nice
     helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
-                       font_size=12, y_label=["Cl", "Cd", "a", 
-                                              "a_prime", "Angle of \nattack",
-                                              "circulation", "f_t"])
-    helper.handle_figure(fig, show=True, size=(6, 12))
+                       font_size=12, legend=[True],
+                       y_label=["Cl", "Angle of \nattack",  "Cd", "circulation", "a", "f_n", "a_prime", "f_t"])
+    helper.handle_figure(fig, show=True, size=(12, 8))
     #plt.show()
 
-if __name__== "__main__":
+
+if __name__ == "__main__":
     operational_data = {
         "v_0": 10,
         "outer_radius" : 50,
