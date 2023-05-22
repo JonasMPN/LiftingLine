@@ -2,7 +2,7 @@
 
 
 # Imports
-from testpck.testfile import testfunc
+# from testpck.testfile import testfunc
 import numpy as np
 import scipy
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from bem_pckg import BEM
 from bem_pckg import twist_chord
 import pandas as pd
 import task1
-helper  = Helper()
+helper = Helper()
 
 
 task_1 = True
