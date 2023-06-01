@@ -11,7 +11,8 @@ from vortex_system import VortexSystem
 helper = Helper()
 
 
-def calc_induction_bem(tsr, pitch, wind_speed = 10, rotor_radius=50, root_radius=10, n_blades=3, density=1.225, resolution=200):
+def calc_induction_bem(tsr, pitch, wind_speed=10, rotor_radius=50,
+                       root_radius=10, n_blades=3, density=1.225, resolution=200):
     """
     Function to compute the induction for the whole rotor via BEM from the last assignment
     
@@ -298,7 +299,7 @@ def calc_ll(v_0, air_density, tsr, radius, n_blades, inner_radius,
     n_iter = 0
     L_mag_new = 0
     while residual > residual_max and n_iter<=n_iter_max:
-        L_mag = L_mag_new # magnitude of the lift
+        L_mag = L_mag_new  # magnitude of the lift
         u_induced = trailing_mat_u @ trailing_circulation + bound_mat_u @ bound_circulation # calculate stream-wise induction
         v_induced = trailing_mat_v @ trailing_circulation + bound_mat_v @ bound_circulation # calc azimuthal velocity / downwash
 
@@ -323,22 +324,22 @@ def calc_ll(v_0, air_density, tsr, radius, n_blades, inner_radius,
 
     #----------------- Compute lift coefficient -----#
     cl = lift / (0.5 * air_density * inflow_velocity["magnitude"] ** 2 * chord_centre)  # lift coefficient
-    axial_induction = - u_induced / v_0 
-    a_prime = v_induced / (omega * radii_centre)  
+    axial_induction = - u_induced / v_0
+    a_prime = v_induced / (omega * radii_centre)
 
     ll_results = {"r_centre": radii_centre,
-                  "element_length":element_length,
-                  "chord":chord_centre,
-                  "twist":twist_centre,
+                  "element_length": element_length,
+                  "chord": chord_centre,
+                  "twist": twist_centre,
                   "u_induced": u_induced,
                   "lift": lift,
                   "cl": cl,
                   "cd": cd_current,
                   "a": axial_induction,
                   "a_prime": a_prime,
-                  "aoa":np.rad2deg(effective_aoa),
-                  "phi": effective_aoa-(pitch+twist_centre),
-                  "bound_circulation":bound_circulation,
+                  "aoa": np.rad2deg(effective_aoa),
+                  "phi": effective_aoa - (pitch + twist_centre),
+                  "bound_circulation": bound_circulation,
                   "inflow_speed": inflow_velocity["magnitude"],
                   "bem_results": bem_results}
 
@@ -377,10 +378,10 @@ def task1(debug=False):
     airfoil = pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
 
     operational_data = {
-        'v_0' : 10,                            # [m] Wind speed
-        'air_density' : 1.225,
-        'tsr' : 8,                      # Tip speed ratios  to be calculated,
-        'airfoil' : pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
+        'v_0': 10,                            # [m] Wind speed
+        'air_density': 1.225,
+        'tsr': 8,                      # Tip speed ratios  to be calculated,
+        'airfoil': pd.read_excel("../data/polar.xlsx", skiprows=3)    # read in the airfoil. Columns [alpha, cl, cd cm]
     }
 
     #ll_results = calc_ll(v_0, air_density, tsr, airfoil, radius, n_blades,
@@ -391,7 +392,8 @@ def task1(debug=False):
     ll_results = calc_ll(v_0, air_density, tsr, radius, n_blades,
                          inner_radius, pitch, resolution_ll, vortex_core_radius,
                          debug, wake_length, disctretization="uniform",
-                         residual_max=residual_max, n_iter_max=n_iter_max)
+                         residual_max=residual_max, n_iter_max=n_iter_max,
+                            resolution_wake=50)
     #---------------- Plotting ----------------------#
     # if debug:
     #     fig, axs = plt.subplots(7, 1)
@@ -421,6 +423,7 @@ def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     Function to compare the lifting line and the BEM results.
     This function is intended to be purely plotting
     """
+
     results = task1(debug=False)
     forces = calc_forces(results["cl"], results["cd"], results["phi"],
                          results["chord"], results["element_length"],
@@ -444,7 +447,7 @@ def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     axs[3, 0].plot(results["r_centre"], results["a_prime"])
     axs[3, 0].plot(results["bem_results"]["r_centre"], results["bem_results"]["a_prime"])
     
-    #aoa 
+    # aoa 
     axs[0, 1].plot(results["r_centre"], results["aoa"])
     axs[0, 1].plot(results["bem_results"]["r_centre"], results["bem_results"]["alpha"])
     
@@ -463,8 +466,108 @@ def compare_ll_bem(v_0: float, inner_radius, outer_radius, n_blades, density):
     helper.handle_axis(axs, x_label="radial position", grid=True, line_width=3,
                        font_size=12, legend=[True],
                        y_label=["Cl", "Angle of \nattack",  "Cd", "circulation", "a", "f_n", "a_prime", "f_t"])
-    helper.handle_figure(fig, show=True, size=(12, 8))
+    helper.handle_figure(fig, show=False, size=(12, 8))
+    compare_aoa_phi(results)
+    compare_cl_cd(results)
+    compare_loads(results, forces)
+    compare_circulation(results)
+
+
+def compare_aoa_phi(results):
+    """
+    Compares the angles in LL and BEM
+
+    """
+    fig, axs = plt.subplots(2, 1)
+    # aoa
+    axs[0].plot(results["r_centre"], results["aoa"], label='LL')
+    axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["alpha"], label='BEM')
+    
+    # Phi
+    axs[1].plot(results["r_centre"], np.rad2deg(results["phi"] ), label='LL')
+    axs[1].plot(results["bem_results"]["r_centre"], np.rad2deg(results["bem_results"]["phi"]), label='BEM')
+    
+    helper.handle_axis(axs, x_label="Radial position (m)", grid=True, line_width=2.5,
+                       font_size=12, legend=[True],
+                       y_label=[r"$\alpha \; (^\circ )$ ", r"$\phi \; (^\circ )$"])
+    plt.savefig("../results/task1/ll_bem_phi_alpha.pdf", bbox_inches='tight')
     #plt.show()
+    return
+
+
+def compare_cl_cd(results):
+    """
+    Compares the angles in LL and BEM
+
+    """
+    fig, axs = plt.subplots(2, 1)
+    
+    # CL
+    axs[0].plot(results["r_centre"], results["cl"], label='LL')
+    axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_l"], label='BEM')
+    
+    # Cd
+    axs[1].plot(results["r_centre"], results["cd"], label='LL')
+    axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["c_d"], label='BEM')
+    
+    # circulation
+    # axs[1].plot(results["r_centre"], results["bound_circulation"], label='LL')
+    # axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"], label='BEM')
+    
+    helper.handle_axis(axs, x_label="Radial position (m)", grid=True, line_width=2.5,
+                       font_size=12, legend=[True],
+                       y_label=[r"$C_l$ (-)", r"$C_d$ (-)"])
+    plt.savefig("../results/task1/ll_bem_cl_cd.pdf", bbox_inches='tight')
+    # plt.show()
+    return
+
+
+def compare_loads(results, forces):
+    """
+    Compares the loads in LL and BEM
+
+    """
+    fig, axs = plt.subplots(2, 1)
+    
+    # normal loads
+    axs[0].plot(results["r_centre"], forces["f_n"], label='LL')
+    axs[0].plot(results["bem_results"]["r_centre"], results["bem_results"]["f_n"], label='BEM')
+    
+    # tangential loads
+    axs[1].plot(results["r_centre"], forces["f_t"], label='LL')
+    axs[1].plot(results["bem_results"]["r_centre"], results["bem_results"]["f_t"], label='BEM')
+    
+    helper.handle_axis(axs, x_label="Radial position (m)", grid=True, line_width=2.5,
+                       font_size=12, legend=[True],
+                       y_label=[r"$f_n$ (N/m)", r"$f_n$ (N/m)"])
+    plt.savefig("../results/task1/ll_bem_fn_ft.pdf", bbox_inches='tight')
+    # plt.show()
+    return
+
+
+def compare_circulation(results):
+    """
+    Compares the angles in LL and BEM
+
+    """
+    fig, axs = plt.subplots(1, 1)
+    
+    # circulation
+    axs.plot(results["r_centre"], results["bound_circulation"], label='LL', linewidth=2.5)
+    axs.plot(results["bem_results"]["r_centre"], results["bem_results"]["circulation"], label='BEM',linewidth=2.5)
+    
+    axs.set_xlabel("Radial position (m)")
+    axs.set_ylabel(r"$\Gamma$")
+    axs.legend()
+    axs.grid()
+    # helper.handle_axis(axs, x_label="Radial position (m)", grid=True, line_width=2.5,
+    #                   font_size=12, legend=[True],
+    #                   y_label=[r"$\Gamma$"])
+    fig.set_figheight(2.5)
+    # fig.set_figwidth(15)
+    plt.savefig("../results/task1/ll_bem_circulation.pdf", bbox_inches='tight')
+    # plt.show()
+    return
 
 
 if __name__ == "__main__":
