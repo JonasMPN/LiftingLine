@@ -103,6 +103,8 @@ class BEM:
             "end_correction": list(),# blade end correction (depending on 'tip' and 'root'),
             "c_l": list(),          # lift coefficient at radial position
             "c_d": list(),          # drag coefficient at radial position
+            "c_n": list(),          #
+            "c_t": list(),          #
             "phi": list(),          # inflow angle
             "inflow_speed": list(),  # inflow speed for airfoil
             "chord": list()
@@ -176,6 +178,8 @@ class BEM:
             results["end_correction"].append(blade_end_correction)
             results["c_l"].append(c_l)
             results["c_d"].append(c_d)
+            results["c_n"].append(c_n)
+            results["c_t"].append(c_t)
             results["phi"].append(phi)
             results["inflow_speed"].append(inflow_speed)
             results["chord"].append(chord)
