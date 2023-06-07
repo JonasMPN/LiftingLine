@@ -1,5 +1,4 @@
 # class to create the vortex system of a wing, a blade or a whole rotor
-from typing import Dict, Any
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -128,6 +127,7 @@ class VortexSystem:
         Sets the parameters of the rotor array. 'Rotor array' is an umbrella term for wind farms if the rotors are
         wind turbines, and for distributed propulsion if they are aircraft propellers. The number of elements the
         lists of 'rotor_positions' and 'rotor_rotations' have is the number of rotors that are created.
+
         :param rotor_positions: A list of points at which the rotor centre of each rotor is. Each point has three
                                 coordinates.
         :param rotor_rotations: A list of the rotor rotations which define the position of the blades with respect to
@@ -146,6 +146,7 @@ class VortexSystem:
     def set_wake(self, wake_speed: float, wake_length: float, resolution: int) -> None:
         """
         Sets the three parameters of the wake of this instance.
+
         :param wake_speed: the speed at which the wake is convected in m/s
         :param wake_length: the downwind length of the wake in m
         :param resolution: the number of points used to discretise one trailing vortex
@@ -171,15 +172,18 @@ class VortexSystem:
         :return:
         """
         rotor_angle = 0 if self.rotor_rotations is None else self.rotor_rotations[0]
+        rot_matrix = np.array([[1, 0, 0],  # calculate rotation matrix for the current blade
+                               [0, np.cos(rotor_angle), np.sin(rotor_angle)],
+                               [0, -np.sin(rotor_angle), np.cos(rotor_angle)]])
         qc_elements = self.c_elements/4 # quarter chord of blade element ends
         x_qc = -np.sin(self.blade_rotation)*qc_elements # x position of the quarter chord of blade element ends
-        y_qc = np.cos(self.blade_rotation)*qc_elements-np.sin(rotor_angle)*self.r_elements # y position of the
-        # quarter chord of blade element ends
-        z_qc = np.cos(rotor_angle)*self.r_elements # z position of the quarter chord of the blade ends
+        y_qc = np.cos(self.blade_rotation)*qc_elements  # y position of the quarter chord of blade element ends
+        z_qc = self.r_elements  # z position of the quarter chord of the blade ends
         coordinates_ends = np.asarray([[x, y, z] for x, y, z in zip(x_qc, y_qc, z_qc)])
+        rotated_coordinates_ends = np.dot(coordinates_ends, rot_matrix)
         # the line below assumes the control point to be in the middle (x, y, and z wise) between the two ends,
         # i.e. on the bound vortex in the radial middle of the element.
-        self.control_points = (coordinates_ends[:-1]+coordinates_ends[1:])/2
+        self.control_points = (rotated_coordinates_ends[:-1]+rotated_coordinates_ends[1:])/2
         self.n_control_points = self.control_points.shape[0]
         return None
 
@@ -242,6 +246,10 @@ class VortexSystem:
         return None
 
     def rotor_array(self) -> None:
+        """
+
+        :return:
+        """
         self._assert_properties("array", self.rotor_array) # assert that the rotor array properties are defined
         self._assert_properties("blade", self.rotor_array) # assert that the blade properties are defined
         self._rotor_array_bound(self.rotor_positions, self.rotor_rotations) # calculate the bound vortex coordinates
@@ -726,22 +734,23 @@ class VortexSystem:
         :param core_radius: radius of the solid body inside the vortex
         :return: numpy array os size (3,)
         """
-        r_s = induction_point-vortex_start # vector from the start of the vortex to the induction point
-        r_e = induction_point-vortex_end # vector from the end of the vortex to the induction point
-        r_v = vortex_end-vortex_start # vector from the start of the vortex to the end of the vortex
+        r_s = induction_point-vortex_start  # vector from the start of the vortex to the induction point
+        r_e = induction_point-vortex_end  # vector from the end of the vortex to the induction point
+        r_v = vortex_end-vortex_start  # vector from the start of the vortex to the end of the vortex
 
-        l_s = np.linalg.norm(r_s) # distance between the induction point and the start of the vortex
-        l_e = np.linalg.norm(r_e) # distance between the induction point and the end of the vortex
-        l_v = np.linalg.norm(r_v) # length of the vortex
+        l_s = np.linalg.norm(r_s)  # distance between the induction point and the start of the vortex
+        l_e = np.linalg.norm(r_e)  # distance between the induction point and the end of the vortex
+        l_v = np.linalg.norm(r_v)  # length of the vortex
 
-        h = np.linalg.norm(np.cross(r_v, r_s))/l_v # shortest distance between the control point and an infinite
+        h = np.linalg.norm(np.cross(r_v, r_s))/l_v  # shortest distance between the control point and an infinite
         # extension of the vortex filament
-        if h == 0: # the control point lies in the centre of the vortex
+        if h == 0:  # the control point lies in the centre of the vortex
             return np.zeros(3)
 
-        e_i = np.cross(r_v, r_s)/(h*l_v) # unit vector of the direction of induced velocity
-        if h <= core_radius: # the control point lies inside the vortex core
+        e_i = np.cross(r_v, r_s)/(h*l_v)  # unit vector of the direction of induced velocity
+        if h <= core_radius:  # the control point lies inside the vortex core
             return h/(2*np.pi*core_radius**2)*e_i # induced velocity of solid body rotation
+            # return e_i/(4*np.pi*core_radius*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e)))
         else:
             return e_i/(4*np.pi*h*l_v)*(np.dot(r_v, (r_s/l_s-r_e/l_e))) # induced velocity of irrotational vortex
 
