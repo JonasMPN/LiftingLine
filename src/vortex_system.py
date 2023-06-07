@@ -537,6 +537,24 @@ class VortexSystem:
         else:
             return fig, ax
 
+    def get_vortex_lengths(self) -> tuple[float, float, float]:
+        """
+        This function returns the length of the trailing vortices (more specifically, the first trailing vortex that
+        is not "attached" to the blade), and the smallest length of all bound vortices.
+
+        :return:
+        """
+        trailing_bound_lengths = list()
+        for rad_positions in self.coordinates_blade_trailing_elementwise["x"].keys():
+            xs = self.coordinates_blade_trailing_elementwise["x"][rad_positions]
+            ys = self.coordinates_blade_trailing_elementwise["y"][rad_positions]
+            zs = self.coordinates_blade_trailing_elementwise["z"][rad_positions]
+            trailing_bound_lengths.append(np.sqrt((xs[1]-xs[0])**2+(ys[1]-ys[0])**2+(zs[1]-zs[0])**2))
+        trailing_bound = min(trailing_bound_lengths)
+        trailing = np.linalg.norm(self.coordinates_blade_trailing[2]-self.coordinates_blade_trailing[1])
+        bound = min(np.linalg.norm(self.coordinates_blade_bound[1:, :]-self.coordinates_blade_bound[:-1, :], axis=1))
+        return trailing_bound, trailing, bound
+
     def _blade_bound_elementwise(self) -> dict[str, dict]:
         """
         Creates a dictionary of the bound vortex coordinates. Each key is an axis and its values are np.ndarrays with
