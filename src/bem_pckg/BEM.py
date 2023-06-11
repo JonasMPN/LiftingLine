@@ -552,6 +552,7 @@ class BEM:
         radius:     max radius
         omega:      [rad/s] rotational speed
         """
+        breakpoint()
         power = omega*self.n_blades*scipy.integrate.simpson(np.multiply([*radial_positions, self.rotor_radius], [*f_t, 0]),
                                                            [*radial_positions, self.rotor_radius])
         return power
