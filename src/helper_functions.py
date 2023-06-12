@@ -56,14 +56,14 @@ class Helper():
                       save_to: str=False,
                       show: bool=False,
                       size: tuple=(18.5, 10),
-                      inches: int=100,
+                      dpi: int=360,
                       tight_layout: bool=True,
                       close: bool=True) -> matplotlib.pyplot.figure:
         figure.set_size_inches(size)
-        figure.set_dpi(inches)
+        figure.set_dpi(dpi)
         figure.set_tight_layout(tight_layout)
         if save_to:
-            figure.savefig(save_to)
+            figure.savefig(save_to, dpi=dpi)
         if show:
             matplotlib.pyplot.show()
         if close and not show:
@@ -155,7 +155,7 @@ class Helper():
                     if line_width:
                         for line in lines:
                             line.set_linewidth(line_width)
-                    labels = [line.get_label() for line in lines if line.get_label()[0] != "_"]
+                    labels = {line.get_label() for line in lines if line.get_label()[0] != "_"}
                     if type(legend_together) == int:
                         if font_size:
                             axis[legend_together].legend(lines, labels, ncol=legend_columns, prop={"size": font_size},
