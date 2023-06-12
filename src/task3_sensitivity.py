@@ -112,17 +112,17 @@ def task3(wake_speed, blade_discretization, azimuthal_discretization, wake_lengt
 
         # Plotting #
         # Axial induction a
-        ax[0, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results['a'])
+        ax[0, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_results['a'])
         ax[0, 0].set_ylabel('Axial induction (-)')
         ax[0, 0].grid(True)
 
         # Azimuthal induction a'
-        ax[0, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results['a_prime'])
+        ax[0, 1].plot(ll_results['r_centre'] / operational_data["radius"], ll_results['a_prime'])
         ax[0, 1].set_ylabel('Azimuthal induction (-)')
         ax[0, 1].grid(True)
 
         # Lift coefficient cl
-        ax[1, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results['cl'])
+        ax[1, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_results['cl'])
         ax[1, 0].set_ylabel(r'$c_l$ (-)')
         ax[1, 0].grid(True)
 
@@ -130,38 +130,39 @@ def task3(wake_speed, blade_discretization, azimuthal_discretization, wake_lengt
         omega = operational_data["tsr"] * operational_data["v_0"] / operational_data["radius"]
         bound_circulation_nondim = ll_results['bound_circulation'] * operational_data["n_blades"] * omega / \
                                    (np.pi * operational_data["v_0"] ** 2)
-        ax[1, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), bound_circulation_nondim)
-        ax[1, 1].set_ylabel(r'Bound circulation $\Gamma^*$')
+        ax[1, 1].plot(ll_results['r_centre'] / operational_data["radius"], bound_circulation_nondim)
+        ax[1, 1].set_ylabel(r'Bound circulation $\Gamma^*$(-)')
         ax[1, 1].grid(True)
 
         # Normal Loads
-        ax[2, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_loads['f_n'])
-        # ax[0, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_cn)
-        ax[2, 0].set_ylabel(r'Normal loads (N/m)')
+        # ax[2, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads['f_n'])
+        ax[2, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads['f_n'] / (
+                    .5 * operational_data['air_density'] * operational_data['radius'] * operational_data['v_0'] ** 2))
+        ax[2, 0].set_ylabel(r'Normal loads $f_n^*$(-)')
         ax[2, 0].set_xlabel(r'Radial position $\mu$(-)')
         ax[2, 0].grid(True)
 
         # Tangential Loads
-        ax[2, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_loads['f_t'])
-        # ax[1, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_ct)
-        ax[2, 1].set_ylabel(r'Tangential loads (N/m)')
+        # ax[2, 1].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads['f_t'])
+        ax[2, 1].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads['f_t'] / (.5 * operational_data['air_density'] * operational_data['radius'] * operational_data['v_0']**2))
+        ax[2, 1].set_ylabel(r'Tangential loads $f_t^*$(-)')
         ax[2, 1].set_xlabel(r'Radial position $\mu$(-)')
         ax[2, 1].grid(True)
 
-        # ax1.plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results["aoa"])
+        # ax1.plot(ll_results['r_centre'] / operational_data["radius"], ll_results["aoa"])
         # ax1.set_xlabel(r'Radial position $\mu$(-)')
         # ax1.set_ylabel(r'$\alpha$ (deg)')
         # ax1.grid(True)
 
     # Add reference results
-    # ax[0, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results_ref['a'], '--')
-    # ax[0, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results_ref['a_prime'], '--')
-    # ax[1, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_results_ref['cl'], '--')
+    # ax[0, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_results_ref['a'], '--')
+    # ax[0, 1].plot(ll_results['r_centre'] / operational_data["radius"], ll_results_ref['a_prime'], '--')
+    # ax[1, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_results_ref['cl'], '--')
     # bound_circulation_nondim = ll_results_ref['bound_circulation'] * operational_data["n_blades"] * omega / \
     #                            (np.pi * operational_data["v_0"] ** 2)
-    # ax[1, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), bound_circulation_nondim, '--')
-    # ax[2, 0].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_loads_ref['f_n'], '--')
-    # ax[2, 1].plot(ll_results['r_centre'] / ll_results['r_centre'].max(), ll_loads_ref['f_t'], '--')
+    # ax[1, 1].plot(ll_results['r_centre'] / operational_data["radius"], bound_circulation_nondim, '--')
+    # ax[2, 0].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads_ref['f_n'], '--')
+    # ax[2, 1].plot(ll_results['r_centre'] / operational_data["radius"], ll_loads_ref['f_t'], '--')
 
     # Legend
     plt.tight_layout()
@@ -183,7 +184,7 @@ def task3(wake_speed, blade_discretization, azimuthal_discretization, wake_lengt
         plt.savefig("../results/task3/task3_wake_length.pdf", bbox_inches='tight')
         plt.savefig("../results/task3/task3_wake_length.pgf", bbox_inches='tight')
     elif azimuthal_discretization.count(azimuthal_discretization[0]) != len(azimuthal_discretization):
-        legend = [f'{int(x/(w_l/(2 * operational_data["radius"])))} points' for x in azimuthal_discretization]
+        legend = [f'{int(x / (w_l / (2 * operational_data["radius"])))} points' for x in azimuthal_discretization]
         legend.append("Ref")
         plt.legend(legend)
         plt.savefig("../results/task3/task3_azimuth_discr.pdf", bbox_inches='tight')
@@ -210,10 +211,10 @@ if __name__ == '__main__':
     # visualise_vortex_sys(v_0, tsr, radius, resolution_ll, wake_speed, wake_length, azimuthal_discretization)
 
     parameters = {
-        "wakeSpeed": False,
-        "bladeDiscr": False,
-        "wakeDiscr": False,
-        "wakeLength": False,
+        "wakeSpeed": True,
+        "bladeDiscr": True,
+        "wakeDiscr": True,
+        "wakeLength": True,
         "vortexCoreRad": True
 
     }
@@ -239,7 +240,8 @@ if __name__ == '__main__':
     if parameters["wakeDiscr"]:
         # Variable azimuthal discretization
         elements_per_diam = [50, 120, 200]  # wake elements per diameter downstream
-        azimuthal_discretization = [int(x * 2.5) for x in elements_per_diam] # total no of wake elements for wake length of 2.5 diam
+        azimuthal_discretization = [int(x * 2.5) for x in
+                                    elements_per_diam]  # total no of wake elements for wake length of 2.5 diam
         wake_speed_range = len(azimuthal_discretization) * ["from_BEM"]
         blade_discretization = len(azimuthal_discretization) * ['sin']
         wake_length = len(azimuthal_discretization) * [2.5 * 2 * 50]
