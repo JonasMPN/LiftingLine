@@ -161,7 +161,7 @@ def calc_velocity(u_inf: float, omega: float,
 
 def calc_ll(v_0, air_density, tsr, radius, n_blades, inner_radius,
             pitch, resolution_ll, vortex_core_radius, debug, wake_length,
-            disctretization="sin",
+            disctretization="uniform",
             residual_max=1e-10, n_iter_max=1000, wake_speed='from_BEM', resolution_wake=50):
 
     # --------------Get twist and chord distributions ----------------#
@@ -606,7 +606,8 @@ def compare_loads(results, forces, omega):
     radius = 50
     v_0 = 10
     rho = 1.225
-    nondim_factor= 0.5 * rho * v_0**2 * (np.pi * radius**2)
+    # nondim_factor= 0.5 * rho * v_0**2 * (np.pi * radius**2)
+    nondim_factor= 0.5 * rho * v_0**2 * radius
     thrust_bem = 3*scipy.integrate.simpson([*results["bem_results"]["f_n"], 0],
                                            [*results["bem_results"]["r_centre"], radius])
     print(f"Thrust BEM is: {thrust_bem}")
@@ -633,16 +634,27 @@ def compare_loads(results, forces, omega):
     # axs[0].plot(results["r_centre"]/radius, 3* forces["f_n"]/thrust_ll, marker="o", label='LL')
     # axs[0].plot(results["bem_results"]["r_centre"]/radius, 3*results["bem_results"]["f_n"]/thrust_ll, label='BEM')
     # axs[0].plot(results["r_centre"]/radius, forces["f_n"]/nondim_factor, marker="o", label='LL')
-    axs[0].plot(results["bem_results"]["r_centre"]/radius, 3*results["bem_results"]["f_n"]/(thrust_ll/ radius), label='BEM')
-    axs[0].plot(results["r_centre"]/radius, 3* forces["f_n"]/(thrust_ll/radius), marker="o", label='LL')
+    # Non dim with the thrust per blade
+    # axs[0].plot(results["bem_results"]["r_centre"]/radius, 3*results["bem_results"]["f_n"]/(thrust_ll/ radius), label='BEM')
+    # axs[0].plot(results["r_centre"]/radius, 3* forces["f_n"]/(thrust_ll/radius), marker="o", label='LL')
+   
+    # Non- dim as carlos in the BEM notebook
+    axs[0].plot(results["r_centre"]/radius, forces["f_n"]/(nondim_factor), marker="o", label='LL')
+    axs[0].plot(results["bem_results"]["r_centre"]/radius, results["bem_results"]["f_n"]/(nondim_factor), label='BEM')
+
 
     # Test: non-dim like a coefficient
     # axs[0].plot(results["bem_results"]["r_centre"]/radius, results["bem_results"]["f_n"]/nondim_factor, label='BEM')
     
-    # tangential loads
-    axs[1].plot(results["r_centre"]/radius, 3* forces["f_t"]/(thrust_ll/radius), marker="o", label='LL')
-    axs[1].plot(results["bem_results"]["r_centre"]/radius, 3*results["bem_results"]["f_t"]/(thrust_ll/radius), label='BEM')
+    # tangential loads nondim by the thrust
+    # axs[1].plot(results["r_centre"]/radius, 3* forces["f_t"]/(thrust_ll/radius), marker="o", label='LL')
+    # axs[1].plot(results["bem_results"]["r_centre"]/radius, 3*results["bem_results"]["f_t"]/(thrust_ll/radius), label='BEM')
     
+    # tangential loads nondim by the stagnation pressure
+    axs[1].plot(results["r_centre"]/radius, forces["f_t"]/(nondim_factor), marker="o", label='LL')
+    axs[1].plot(results["bem_results"]["r_centre"]/radius, results["bem_results"]["f_t"]/(nondim_factor), label='BEM')
+
+
     helper.handle_axis(axs, x_label="Radial position (-)", grid=True, line_width=2.5,
                        font_size=12, legend=[True],
                        y_label=[r"$f_n^*$ (-)", r"$f_t^*$ (-)"])
@@ -658,14 +670,20 @@ def compare_circulation(results):
     """
     fig, axs = plt.subplots(1, 1)
     
+    v_0 = 10
+    tsr = 8
+    radius = 50
+    omega = tsr*v_0/radius
+    n_blades= 3
+    circ_non_dim_factor= (np.pi * v_0**2)/(omega * n_blades)
     # circulation
-    axs.plot(results["r_centre"]/radius, results["bound_circulation"]/(radius*wind_speed),
+    axs.plot(results["r_centre"]/radius, results["bound_circulation"]/(circ_non_dim_factor),
              label='LL', marker='o', linewidth=2.5)
-    axs.plot(results["bem_results"]["r_centre"]/radius, results["bem_results"]["circulation"]/(radius*wind_speed),
+    axs.plot(results["bem_results"]["r_centre"]/radius, results["bem_results"]["circulation"]/(circ_non_dim_factor),
              label='BEM', linewidth=2.5)
     
     axs.set_xlabel("Radial position (-)")
-    axs.set_ylabel(r"$\Gamma$")
+    axs.set_ylabel(r"$\Gamma^*$")
     axs.legend()
     axs.grid()
     # helper.handle_axis(axs, x_label="Radial position (m)", grid=True, line_width=2.5,
